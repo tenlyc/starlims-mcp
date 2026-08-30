@@ -2,4 +2,9 @@ export * from './types.js';
 export * from './catalog.js';
 export * from './capabilities.js';
 export * from './server.js';
+export * from './config.js';
+export * from './logger.js';
+export * from './form-resources.js';
+export * from './adapters/starlims-http-adapter.js';
+export * from './transports.js';
 //# sourceMappingURL=index.d.ts.map

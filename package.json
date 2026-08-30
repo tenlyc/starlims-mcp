@@ -1,7 +1,7 @@
 {
   "name": "@tenlyc/starlims-mcp",
-  "version": "0.3.1",
-  "description": "Shared STARLIMS MCP contracts and host-neutral server runtime",
+  "version": "0.4.0",
+  "description": "Standalone and embeddable MCP server for STARLIMS development tools",
   "type": "module",
   "main": "cjs/index.js",
   "types": "dist/index.d.ts",
@@ -10,13 +10,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./cjs/index.js"
-    }
+    },
+    "./cli": "./dist/cli.js"
+  },
+  "bin": {
+    "starlims-mcp": "./dist/cli.js"
   },
   "files": [
     "dist",
     "cjs",
-    "scm",
-    "vendor",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"

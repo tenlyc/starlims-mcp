@@ -12,10 +12,16 @@ export async function buildCapabilityDocument(options: {
   return {
     server: options.serverName || 'starlims-mcp',
     version: options.version,
+    serverProvenance: {
+      repository: 'https://github.com/tenlyc/starlims-mcp',
+      owner: 'tenlyc/starlims-mcp',
+      license: 'MIT',
+      relationship: 'original'
+    },
     profile: options.profile,
     adapter: options.adapter.id,
     capabilities: [...options.adapter.capabilities],
-    tools: tools.map(({ id, title, origin, risk, capability, schemaVersion }) => ({ id, title, origin, risk, capability, schemaVersion })),
+    tools: tools.map(({ id, title, origin, provenance, risk, capability, schemaVersion }) => ({ id, title, origin, provenance, risk, capability, schemaVersion })),
     backend: [...backend]
   };
 }

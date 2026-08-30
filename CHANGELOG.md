@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0] - 2026-08-30
+
+- 增加可执行 CLI、stdio 与 Streamable HTTP 传输，支持脱离宿主独立运行。
+- 增加独立 STARLIMS HTTP Adapter、环境变量/JSON 配置加载和日志敏感信息脱敏。
+- 默认只读；显式允许后提供签出、保存、签入、多语言 Resources 写入、内容版本指纹和写后回读验证。
+- `get_capabilities` 为 Server 和每个工具返回仓库、维护方、许可证、来源提交及派生关系。
+- 增加模拟 SCM_API 的读取、写入、stdio 和 HTTP 端到端集成测试。
+- npm 运行时包不再携带大型 Vendor 快照；快照仍完整保留在 GitHub 仓库并由 CI 验证。
+
 ## [0.3.1] - 2026-08-30
 
 - 归档实现多语言 Form Resources MCP 的 DevTools 提交，包含资源解析、MIME/Base64 回退解码、写入门禁和测试。

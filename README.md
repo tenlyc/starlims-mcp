@@ -47,9 +47,9 @@ AI client
 SCM_API / STARLIMS_MCP_API / product-specific backend extensions
 ```
 
-宿主负责登录凭据、服务器选择、权限确认和实际 API 调用。只有 Adapter 声明支持的能力才会注册为 MCP 工具。
+嵌入模式下由宿主负责登录凭据、服务器选择、权限确认和实际 API 调用；独立模式使用本仓库提供的 HTTP Adapter，并从环境变量或本地配置读取连接信息。无论哪种模式，只有 Adapter 声明支持且服务端权限策略允许的能力才会注册为 MCP 工具。
 
-The host owns credentials, server selection, approval UX, and actual API calls. Only capabilities declared by the Adapter are registered as MCP tools.
+In embedded mode the host owns credentials, server selection, approval UX, and API calls. Standalone mode uses the HTTP adapter provided here and loads connection settings from environment variables or local configuration. In both modes, only capabilities declared by the adapter and permitted by the server policy are registered as MCP tools.
 
 ## Profile 与工具来源 / Profiles and tool provenance
 
@@ -67,6 +67,32 @@ Every tool declares an `origin`:
 - `starlimsvscode`：VS Code 专属兼容能力 / VS Code-specific compatibility behavior.
 - `starlims-devtools`：DevTools 产品专属能力 / DevTools product-specific behavior.
 - `starlims-mcp`：本仓库独立发展的公共能力 / public capabilities developed by this repository.
+
+`origin` 只表示工具面向哪些宿主或兼容 Profile，不再被用来推断代码所有权。每个工具还包含机器可读的 `provenance`：
+
+`origin` only describes host/profile availability and must not be used to infer code ownership. Every tool also carries machine-readable `provenance` metadata:
+
+- `repository`：实际来源或维护仓库 / source or maintaining repository.
+- `owner`：维护方 / maintainer.
+- `license`：来源许可证 / source license.
+- `relationship`：`derived-from-upstream`（基于上游适配）、`upstream-compatible`（上游兼容）或 `original`（独立开发）。
+
+  `relationship`: `derived-from-upstream`, `upstream-compatible`, or `original`.
+- `sourceCommit`：引用上游时固定到已审查的 40 位提交 / reviewed 40-character upstream commit when applicable.
+
+当前归属如下：
+
+Current ownership is:
+
+| 来源 / Source | 工具 / Tools | 说明 / Notes |
+| --- | --- | --- |
+| [`MrDoe/starlimsvscode`](https://github.com/MrDoe/starlimsvscode) | `browse_tree`, `search_by_name`, `global_code_search`, `list_languages`, `get_item_code`, `read_log`, `get_table_definition`, `checkout_item`, `save_item`, `checkin_item`, `undo_checkout`, `execute_server_script`, `execute_data_source`，以及 VS Code 兼容工具 | 基于固定上游提交适配为宿主无关契约；保留 MIT 来源与提交 / adapted from a pinned MIT-licensed upstream commit |
+| [`tenlyc/starlims-mcp`](https://github.com/tenlyc/starlims-mcp) | `get_capabilities`, `get_form_resources`, `save_form_resources`, `set_form_resource` | 本仓库独立开发的共享能力 / original shared capabilities maintained here |
+| [`tenlyc/starlims-devtools`](https://github.com/tenlyc/starlims-devtools) | `list_checked_out_items`, `query_checkin_history` | DevTools 原创产品能力，经统一 Profile 暴露 / original DevTools capabilities exposed through the unified profile |
+
+工具实际执行时可调用 `get_capabilities` 查看每个已启用工具的完整来源，而不必依赖 README 的静态列表。
+
+At runtime, call `get_capabilities` to inspect the complete provenance of every enabled tool instead of relying only on this static list.
 
 连接后调用 `get_capabilities` 可读取实际工具、来源、风险、Schema 版本、Adapter 能力和后端组件版本。
 
@@ -144,11 +170,74 @@ The importer requires a clean source repository whose `HEAD` exactly matches the
 
 ## 使用 / Usage
 
+### 独立 Server / Standalone server
+
+安装后可直接作为 MCP Server 启动，不依赖 starlims-devtools 或 VS Code：
+
+After installation it can run as an MCP server without starlims-devtools or VS Code:
+
+```bash
+export STARLIMS_BASE_URL="https://starlims.example.com"
+export STARLIMS_USER="developer"
+export STARLIMS_PASSWORD="..."
+
+npx -y @tenlyc/starlims-mcp --transport stdio
+```
+
+默认权限为 `read-only`，仅公开浏览、搜索、代码读取、语言、表定义和多语言 Resources 读取。明确允许写入后才注册签出、保存、签入和 Resources 写入工具：
+
+The default policy is `read-only`. Checkout, save, check-in, and Resources write tools are registered only when writes are explicitly enabled:
+
+```bash
+npx -y @tenlyc/starlims-mcp \
+  --transport stdio \
+  --permission-policy allow-writes
+```
+
+可使用 JSON 配置文件保存非敏感设置：
+
+Non-secret settings may be stored in a JSON config file:
+
+```json
+{
+  "baseUrl": "https://starlims.example.com",
+  "user": "developer",
+  "passwordEnv": "STARLIMS_PASSWORD",
+  "urlSuffix": "lims",
+  "language": "CHS",
+  "profile": "unified",
+  "transport": "stdio",
+  "permissionPolicy": "read-only"
+}
+```
+
+```bash
+starlims-mcp --config ./starlims-mcp.json
+```
+
+密码、Token、Cookie 和 Authorization 值会从日志中脱敏。建议只通过环境变量或宿主密钥存储提供密码，不要提交包含明文密码的配置文件。
+
+Passwords, tokens, cookies, and authorization values are redacted from logs. Supply passwords through environment variables or host secret storage, and never commit plaintext credentials.
+
+Streamable HTTP 模式默认绑定本机回环地址：
+
+Streamable HTTP mode binds to loopback by default:
+
+```bash
+starlims-mcp --transport http --host 127.0.0.1 --port 3102
+```
+
+绑定到非回环地址时必须提供至少 16 字符的 `STARLIMS_MCP_AUTH_TOKEN`。客户端通过 `Authorization: Bearer <token>` 访问 `/mcp`。
+
+Binding to a non-loopback address requires `STARLIMS_MCP_AUTH_TOKEN` with at least 16 characters. Clients authenticate to `/mcp` with `Authorization: Bearer <token>`.
+
+### 作为库嵌入 / Embedded library
+
 ```ts
 import { createStarlimsMcpServer } from '@tenlyc/starlims-mcp';
 
 const server = createStarlimsMcpServer({
-  version: '0.3.1',
+  version: '0.4.0',
   profile: 'devtools',
   adapter: {
     id: 'my-starlims-host',
@@ -158,9 +247,9 @@ const server = createStarlimsMcpServer({
 });
 ```
 
-只有 Adapter 声明的能力会被公开。共享运行时不保存 STARLIMS 密码，也不自行选择服务器。
+只有 Adapter 声明的能力会被公开。核心运行时不保存 STARLIMS 密码；独立 Adapter 只在进程内持有启动时提供的凭据。
 
-Only Adapter-declared capabilities are exposed. The shared runtime stores no STARLIMS passwords and does not select a server by itself.
+Only Adapter-declared capabilities are exposed. The core runtime stores no STARLIMS passwords; the standalone adapter keeps startup credentials in process memory only.
 
 ## 开发与验证 / Development and verification
 

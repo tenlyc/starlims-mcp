@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildCapabilityDocument, getProfileTools, STARLIMS_TOOL_CATALOG } from '../index.js';
+import { buildCapabilityDocument, findToolContract, getProfileTools, STARLIMS_TOOL_CATALOG } from '../index.js';
 
 test('catalog has unique ids and explicit provenance', () => {
   const ids = STARLIMS_TOOL_CATALOG.map((tool) => tool.id);
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(STARLIMS_TOOL_CATALOG.every((tool) => tool.origin && tool.capability && tool.schemaVersion));
+  assert.ok(STARLIMS_TOOL_CATALOG.every((tool) => tool.provenance.repository && tool.provenance.owner && tool.provenance.license));
+  assert.equal(findToolContract('browse_tree')?.provenance.repository, 'https://github.com/MrDoe/starlimsvscode');
+  assert.equal(findToolContract('get_form_resources')?.provenance.repository, 'https://github.com/tenlyc/starlims-mcp');
+  assert.equal(findToolContract('list_checked_out_items')?.provenance.repository, 'https://github.com/tenlyc/starlims-devtools');
 });
 
 test('profiles preserve host compatibility without conflicting save schemas', () => {
@@ -33,4 +37,6 @@ test('capability document exposes only tools implemented by the adapter', async 
   });
   assert.deepEqual(document.tools.map((tool) => tool.id), ['browse_tree', 'get_item_code']);
   assert.equal(document.backend[0]?.name, 'SCM_API');
+  assert.equal(document.serverProvenance.repository, 'https://github.com/tenlyc/starlims-mcp');
+  assert.equal(document.tools[0]?.provenance.repository, 'https://github.com/MrDoe/starlimsvscode');
 });

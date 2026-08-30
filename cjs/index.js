@@ -18,4 +18,9 @@ __exportStar(require("./types.js"), exports);
 __exportStar(require("./catalog.js"), exports);
 __exportStar(require("./capabilities.js"), exports);
 __exportStar(require("./server.js"), exports);
+__exportStar(require("./config.js"), exports);
+__exportStar(require("./logger.js"), exports);
+__exportStar(require("./form-resources.js"), exports);
+__exportStar(require("./adapters/starlims-http-adapter.js"), exports);
+__exportStar(require("./transports.js"), exports);
 //# sourceMappingURL=index.js.map

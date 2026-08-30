@@ -1,5 +1,23 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "provenance": {
+    "starlimsvscode": {
+      "repository": "https://github.com/MrDoe/starlimsvscode",
+      "commit": "92b9014244eb09a56ed589db5155c3b7914b70a2",
+      "license": "MIT",
+      "relationship": "derived-from-upstream"
+    },
+    "starlims-mcp": {
+      "repository": "https://github.com/tenlyc/starlims-mcp",
+      "license": "MIT",
+      "relationship": "original"
+    },
+    "starlims-devtools": {
+      "repository": "https://github.com/tenlyc/starlims-devtools",
+      "license": "MIT",
+      "relationship": "original"
+    }
+  },
   "shared": [
     "browse_tree",
     "search_by_name",

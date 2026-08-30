@@ -1,6 +1,16 @@
 export type StarlimsToolOrigin = 'shared' | 'starlimsvscode' | 'starlims-devtools' | 'starlims-mcp';
 export type StarlimsToolRisk = 'read' | 'write' | 'execute' | 'destructive';
 export type StarlimsMcpProfile = 'unified' | 'devtools' | 'vscode-compat';
+export type StarlimsSourceRelationship = 'upstream-compatible' | 'derived-from-upstream' | 'original';
+
+export interface StarlimsToolProvenance {
+  repository: string;
+  owner: string;
+  license: string;
+  relationship: StarlimsSourceRelationship;
+  sourceCommit?: string;
+  note?: string;
+}
 
 export interface BackendComponentVersion {
   name: string;
@@ -21,6 +31,7 @@ export interface StarlimsToolSummary {
   id: string;
   title: string;
   origin: StarlimsToolOrigin;
+  provenance: StarlimsToolProvenance;
   risk: StarlimsToolRisk;
   capability: string;
   schemaVersion: string;
@@ -29,6 +40,7 @@ export interface StarlimsToolSummary {
 export interface StarlimsCapabilityDocument {
   server: string;
   version: string;
+  serverProvenance: StarlimsToolProvenance;
   profile: StarlimsMcpProfile;
   adapter: string;
   capabilities: readonly string[];

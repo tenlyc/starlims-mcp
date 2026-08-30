@@ -1,10 +1,11 @@
 import * as z from 'zod/v4';
-import type { StarlimsMcpProfile, StarlimsToolOrigin, StarlimsToolRisk } from './types.js';
+import type { StarlimsMcpProfile, StarlimsToolOrigin, StarlimsToolProvenance, StarlimsToolRisk } from './types.js';
 export interface StarlimsToolContract {
     id: string;
     title: string;
     description: string;
     origin: StarlimsToolOrigin;
+    provenance: StarlimsToolProvenance;
     risk: StarlimsToolRisk;
     capability: string;
     schemaVersion: string;
