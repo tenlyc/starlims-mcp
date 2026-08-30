@@ -1,0 +1,1055 @@
+"use strict";
+/* eslint-disable @typescript-eslint/naming-convention */
+import * as vscode from "vscode";
+import { EnterpriseItemType, TreeEnterpriseItem } from "./enterpriseTreeDataProvider";
+import { EnterpriseService } from "../services/enterpriseService";
+import path from "path";
+import { DOMParser } from "@xmldom/xmldom";
+
+/**
+ * Implements the VS Code TreeDataProvider to build the STARLIMS Checked out tree.
+ */
+export class CheckedOutTreeDataProvider implements vscode.TreeDataProvider<TreeEnterpriseItem> {
+  private treeItems: TreeEnterpriseItem[] = [];
+  private activeTicketItem: TreeEnterpriseItem | undefined;
+  private _onDidChangeTreeData: vscode.EventEmitter<TreeEnterpriseItem | null> =
+    new vscode.EventEmitter<TreeEnterpriseItem | null>();
+  readonly onDidChangeTreeData: vscode.Event<TreeEnterpriseItem | null> = this._onDidChangeTreeData.event;
+
+  /**
+   * Constructor for CheckedOutTreeDataProvider.
+   * @param xmlDS XML dataset as string
+   * @param service EnterpriseService
+   * @returns CheckedOutTreeDataProvider
+   */
+  constructor(xmlDS: string, private service: EnterpriseService) {
+    this.treeItems = this.getDataObject(xmlDS);
+  }
+
+  /**
+   * Replace the current checked-out tree data and refresh the view.
+   */
+  async updateData(xmlDS: string): Promise<void> {
+    this.treeItems = await this.getDataObject(xmlDS);
+    this._onDidChangeTreeData.fire(null);
+  }
+
+  /**
+   * Set the active ticket to display prominently
+   */
+  setActiveTicket(ticketId: number, ticketTitle: string): void {
+    const ticketItem: any = {
+      label: `🎯 Active Ticket #${ticketId}: ${ticketTitle}`,
+      type: "ACTIVE_TICKET",
+      uri: `ticket://${ticketId}`,
+      iconPath: new vscode.ThemeIcon('star'),
+      children: [],
+      scriptLanguage: "",
+      language: "",
+      filePath: undefined,
+      checkedOutBy: undefined,
+      guid: undefined
+    };
+    this.activeTicketItem = ticketItem as TreeEnterpriseItem;
+    this._onDidChangeTreeData.fire(null);
+  }
+
+  /**
+   * Clear the active ticket display
+   */
+  clearActiveTicket(): void {
+    this.activeTicketItem = undefined;
+    this._onDidChangeTreeData.fire(null);
+  }
+
+  /**
+   * Refresh the tree view.
+   */
+  refresh(): void {
+    this._onDidChangeTreeData.fire(null);
+  }
+
+  /**
+   * Get the a view item.
+   * @param item Tree view item as TreeEnterpriseItem
+   * @returns Tree view item as vscode.TreeItem
+   */
+  getTreeItem(item: TreeEnterpriseItem): vscode.TreeItem {
+    const treeItem = new vscode.TreeItem(
+      item.label ?? "",
+      (item.children?.length ?? 0) > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
+    );
+    treeItem.iconPath = item.iconPath;
+    treeItem.contextValue = item.type;
+    let language = item.language ? ", Language: " + item.language : "";
+    treeItem.label = item.checkedOutBy ? `${item.label} (Checked out by ${item.checkedOutBy}${language})` : item.label;
+    treeItem.resourceUri = this.getItemResource(item);
+    treeItem.tooltip = item.tooltip ?? item.label?.toString() ?? "";
+    treeItem.command = {
+      command: "STARLIMS.selectEnterpriseItem",
+      title: "Open File",
+      arguments: [item]
+    };
+    return treeItem;
+  }
+
+  /**
+   * Search for tree item by its GUID
+   * @param guid The GUID of the tree item to search for
+   * @returns The tree item for the document
+   */
+  async getTreeItemByGuid(guid: string, itemType: EnterpriseItemType, startFrom: TreeEnterpriseItem | undefined): Promise<TreeEnterpriseItem | undefined> {
+    const treeItems: TreeEnterpriseItem[] = this.treeItems;
+    // traverse through the tree to find item
+    for (const item of treeItems) {
+      if (item.type === itemType && item.guid === guid) {
+        return item;
+      }
+
+      if (item.children) {
+        for (const child of item.children) {
+          const foundItem = await this.getTreeItemByGuid(guid, itemType, child);
+          if (foundItem) {
+            return foundItem;
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Get the children of the tree view item.
+   * @param item Tree view item
+   * @returns Children of the tree view item.
+   */
+  getChildren(item?: TreeEnterpriseItem): Thenable<TreeEnterpriseItem[] | undefined> {
+    if (item) {
+      return Promise.resolve(item.children ?? []);
+    }
+    
+    // Show active ticket at the top if one is set
+    const rootItems = this.activeTicketItem ? [this.activeTicketItem, ...this.treeItems] : this.treeItems;
+    return Promise.resolve(rootItems);
+  }
+
+  public getLeafItems(): TreeEnterpriseItem[] {
+    const leaves: TreeEnterpriseItem[] = [];
+
+    const visit = (items: TreeEnterpriseItem[]) => {
+      for (const item of items) {
+        if (item.children && item.children.length > 0) {
+          visit(item.children);
+          continue;
+        }
+
+        leaves.push(item);
+      }
+    };
+
+    visit(this.treeItems);
+    return leaves;
+  }
+
+  /**
+   * Get the icon path for the tree view item.
+   * @param icon Icon name
+   * @returns Icon path
+   */
+  private getCustomIcon(icon: string): any {
+    return {
+      light: vscode.Uri.file(path.join(__filename, "..", "..", "resources", "light", icon)),
+      dark: vscode.Uri.file(path.join(__filename, "..", "..", "resources", "dark", icon))
+    };
+  }
+
+  /**
+   * Get the icon path for the tree view item.
+   * @param type Type of the tree view item.
+   * @returns Icon path.
+   */
+  private getIconForType(type: EnterpriseItemType): any {
+    switch (type) {
+      case EnterpriseItemType.Application:
+        return this.getCustomIcon("app.svg");
+
+      case EnterpriseItemType.AppCategory:
+        return this.getCustomIcon("apps.svg");
+
+      case EnterpriseItemType.ClientScriptCategory:
+      case EnterpriseItemType.AppClientScriptCategory:
+        return this.getCustomIcon("js_docs.svg");
+
+      case EnterpriseItemType.ServerScriptCategory:
+      case EnterpriseItemType.AppServerScriptCategory:
+        return this.getCustomIcon("ssl_docs.svg");
+
+      case EnterpriseItemType.DataSourceCategory:
+      case EnterpriseItemType.AppDataSourceCategory:
+        return this.getCustomIcon("sql_docs.svg");
+
+      case EnterpriseItemType.XFDFormCategory:
+        return this.getCustomIcon("xfd_form.svg");
+
+      case EnterpriseItemType.HTMLFormCategory:
+        return this.getCustomIcon("html5.svg");
+
+      case EnterpriseItemType.XFDFormCode:
+      case EnterpriseItemType.HTMLFormCode:
+      case EnterpriseItemType.ClientScript:
+      case EnterpriseItemType.AppClientScript:
+        return this.getCustomIcon("js.svg");
+
+      case EnterpriseItemType.HTMLFormGuide:
+        return this.getCustomIcon("json.svg");
+
+      case EnterpriseItemType.XFDFormXML:
+      case EnterpriseItemType.XFDFormResources:
+      case EnterpriseItemType.HTMLFormXML:
+      case EnterpriseItemType.HTMLFormResources:
+        return this.getCustomIcon("xml.svg");
+
+      case EnterpriseItemType.ServerScript:
+      case EnterpriseItemType.AppServerScript:
+        return this.getCustomIcon("ssl.svg");
+
+      case EnterpriseItemType.DataSource:
+      case EnterpriseItemType.AppDataSource:
+        return this.getCustomIcon("sql.svg");
+
+      default:
+        return new vscode.ThemeIcon("folder-opened");
+    }
+  }
+
+  /**
+   * Returns a URI for the item if it is checked out by the current user.
+   * @param item The item to check
+   * @returns A URI for the item if it is checked out by the current user, otherwise undefined.
+   */
+  private getItemResource(item: any): vscode.Uri | undefined {
+    const config = this.service.getConfig();
+    let resourceUri = vscode.Uri.parse(`starlims:${item.tooltip}`);
+    if (item.checkedOutBy && item.checkedOutBy === config.get("user")) {
+      // change the color of the item
+      resourceUri = vscode.Uri.parse("starlims:/checkedOutByMe");
+      item.color = new vscode.ThemeColor("gitDecoration.modifiedResourceForeground");
+    } else if (item.checkedOutBy) {
+      // change the color of the item
+      resourceUri = vscode.Uri.parse("starlims:/checkedOutByOtherUser");
+      item.color = new vscode.ThemeColor("gitDecoration.untrackedResourceForeground");
+    }
+    return resourceUri;
+  }
+
+  private getTagValue(node: any, tagName: string): string | undefined {
+    if (!node) {
+      return undefined;
+    }
+
+    const tags = node.getElementsByTagName(tagName);
+    if (tags?.length > 0) {
+      return tags[0]?.childNodes[0]?.nodeValue?.trim();
+    }
+
+    const lowerTagName = tagName.toLowerCase();
+    for (let i = 0; i < node.childNodes.length; i++) {
+      const child = node.childNodes[i];
+      if (child.nodeType === 1 && child.localName?.toLowerCase() === lowerTagName) {
+        return child.textContent?.trim();
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Parse XML dataset string to create array of tree view data.
+   * @param checkedOutItems XML dataset as string
+   * @returns data object for tree view.
+   */
+  getDataObject(checkedOutItems: any): any {
+    if (typeof checkedOutItems !== "string") {
+      if (checkedOutItems && typeof checkedOutItems.data === "string") {
+        checkedOutItems = checkedOutItems.data;
+      } else {
+        checkedOutItems = String(checkedOutItems || "");
+      }
+    }
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(checkedOutItems, "text/xml");
+    let pendingCheckins = xmlDoc.getElementsByTagName("PendingCheckins");
+    if (!pendingCheckins.length) {
+      pendingCheckins = xmlDoc.getElementsByTagName("pendingcheckins");
+    }
+    const data: TreeEnterpriseItem[] = [];
+
+    for (let i = 0; i < pendingCheckins.length; i++) {
+      const row = pendingCheckins[i];
+      const childId = this.getTagValue(row, "CHILDID");
+      const childName = this.getTagValue(row, "CHILDNAME");
+      const checkedOutBy = this.getTagValue(row, "CHECKEDOUTBY");
+      const childType = this.getTagValue(row, "CHILDTYPE");
+      const parentID = this.getTagValue(row, "PARENTID");
+      let parentName = this.getTagValue(row, "ParentName") || this.getTagValue(row, "PARENTNAME");
+      const parentType = this.getTagValue(row, "PARENTTYPE");
+      const checkedOutDate = this.getTagValue(row, "CHECKEDOUTDATE");
+      const scriptLanguage = this.getTagValue(row, "SCRIPTLANGUAGE");
+      const appCatName = this.getTagValue(row, "APPCATNAME");
+      const isSystem = this.getTagValue(row, "ISSYSTEM");
+      const language = this.getTagValue(row, "LANGID");
+
+      // create a tree like:
+      // - "Applications" > parentName > "HTML Forms" > childName (for parentType = "APP" and scriptLanguage = "HTML")
+      // - "Applications" > parentName > "XFD Forms" > childName (for parentType = "APP" and scriptLanguage = "JSCRIPT")
+      // - "Applications" > parentName > "Server Scripts" > childName (for parentType = "APP" and childType = "SERVERSCRIPT")
+      // - "Applications" > parentName > "Client Scripts" > childName (for parentType = "APP" and childType = "CLIENTSCRIPT")
+      // - "Applications" > parentName > "Data Sources" > childName (for parentType = "APP" and childType = "DATASOURCE")
+      // - "Server Scripts" > parentName > childName (for parentType = "SSC")
+      // - "Client Scripts" > parentName > childName (for parentType = "CSC")
+      // - "Data Sources" > parentName > childName (for parentType = "DSC")
+
+      if (parentType === "APP") {
+        // create "Applications" category node
+        let rootNode: TreeEnterpriseItem | undefined = data.find(
+          (item: TreeEnterpriseItem) => item.label === "Applications"
+        );
+
+        if (!rootNode) {
+          rootNode = new TreeEnterpriseItem(
+            EnterpriseItemType.AppCategory,
+            "Applications",
+            "",
+            "/Applications/",
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          rootNode.children = [];
+          rootNode.iconPath = this.getIconForType(rootNode.type);
+          rootNode.scriptLanguage = "";
+          rootNode.guid = "";
+          rootNode.checkedOutBy = "";
+          rootNode.filePath = "";
+          rootNode.isSystem = false;
+
+          data.push(rootNode as TreeEnterpriseItem);
+        }
+
+        // create application category node
+        let appCatNode: TreeEnterpriseItem | undefined = rootNode?.children?.find(
+          (item: TreeEnterpriseItem) => item.label === appCatName && item.type === EnterpriseItemType.AppCategory
+        );
+
+        if (!appCatNode) {
+          appCatNode = new TreeEnterpriseItem(
+            EnterpriseItemType.AppCategory,
+            appCatName ?? "",
+            "",
+            `/Applications/${appCatName}/`,
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          appCatNode.children = [];
+          appCatNode.iconPath = this.getIconForType(appCatNode.type);
+          appCatNode.scriptLanguage = "";
+          appCatNode.guid = "";
+          appCatNode.checkedOutBy = "";
+          appCatNode.filePath = "";
+          appCatNode.isSystem = isSystem ? true : false;
+
+          rootNode?.children?.push(appCatNode as TreeEnterpriseItem);
+        }
+
+        // create application node
+        let appNode: TreeEnterpriseItem | undefined = appCatNode.children?.find(
+          (item: TreeEnterpriseItem) => item.label === parentName && item.type === EnterpriseItemType.Application
+        );
+
+        if (!appNode) {
+          appNode = new TreeEnterpriseItem(
+            EnterpriseItemType.Application,
+            parentName ?? "",
+            "",
+            `/Applications/${appCatName}/${parentName}/`,
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          appNode.children = [];
+          appNode.iconPath = this.getIconForType(appNode.type);
+          appNode.scriptLanguage = "";
+          appNode.guid = parentID ?? "";
+          appNode.checkedOutBy = "";
+          appNode.filePath = "";
+          appNode.isSystem = isSystem ? true : false;
+
+          appCatNode.children?.push(appNode as TreeEnterpriseItem);
+        }
+
+        if (scriptLanguage === "HTML") {
+          // create "HTML Forms" node
+          let htmlFormsCatNode: TreeEnterpriseItem | undefined = appNode.children?.find(
+            (item: TreeEnterpriseItem) =>
+              item.label === "HTML Forms" && item.type === EnterpriseItemType.HTMLFormCategory
+          );
+
+          if (!htmlFormsCatNode) {
+            htmlFormsCatNode = new TreeEnterpriseItem(
+              EnterpriseItemType.HTMLFormCategory,
+              "HTML Forms",
+              "",
+              `/Applications/${appCatName}/${parentName}/HTMLForms`,
+              vscode.TreeItemCollapsibleState.Expanded
+            );
+
+            htmlFormsCatNode.children = [];
+            htmlFormsCatNode.iconPath = this.getIconForType(htmlFormsCatNode.type);
+            htmlFormsCatNode.scriptLanguage = "";
+            htmlFormsCatNode.guid = "";
+            htmlFormsCatNode.checkedOutBy = "";
+            htmlFormsCatNode.filePath = "";
+            htmlFormsCatNode.isSystem = false;
+
+            appNode.children?.push(htmlFormsCatNode as TreeEnterpriseItem);
+          }
+
+          // create HTML form XML node
+          let htmlFormXmlNode: TreeEnterpriseItem | undefined = htmlFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.HTMLFormXML
+          );
+
+          if (!htmlFormXmlNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/HTMLForms/XML/${childName}`;
+
+            htmlFormXmlNode = new TreeEnterpriseItem(
+              EnterpriseItemType.HTMLFormXML,
+              childName + " [XML]",
+              "XML",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            htmlFormXmlNode.guid = childId ?? "";
+            htmlFormXmlNode.checkedOutBy = checkedOutBy ?? "";
+            htmlFormXmlNode.isSystem = isSystem ? true : false;
+            htmlFormXmlNode.children = [];
+            htmlFormXmlNode.iconPath = this.getIconForType(htmlFormXmlNode.type);
+            htmlFormXmlNode.filePath = "";
+            htmlFormXmlNode.language = language ?? "";
+            htmlFormXmlNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+            htmlFormsCatNode.children?.push(htmlFormXmlNode);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+
+          // create HTML form code behind node
+          let htmlFormCodeNode: TreeEnterpriseItem | undefined = htmlFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.HTMLFormCode
+          );
+
+          if (!htmlFormCodeNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/HTMLForms/CodeBehind/${childName}`;
+
+            htmlFormCodeNode = new TreeEnterpriseItem(
+              EnterpriseItemType.HTMLFormCode,
+              childName + " [Code Behind]",
+              "JS",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            htmlFormCodeNode.guid = childId ?? "";
+            htmlFormCodeNode.checkedOutBy = checkedOutBy ?? "";
+            htmlFormCodeNode.isSystem = isSystem ? true : false;
+            htmlFormCodeNode.children = [];
+            htmlFormCodeNode.iconPath = this.getIconForType(htmlFormCodeNode.type);
+            htmlFormCodeNode.filePath = "";
+            htmlFormCodeNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+            htmlFormsCatNode.children?.push(htmlFormCodeNode);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+
+          // create HTML form guide node
+          let htmlFormGuideNode: TreeEnterpriseItem | undefined = htmlFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.HTMLFormGuide
+          );
+
+          if (!htmlFormGuideNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/HTMLForms/Guide/${childName}`;
+
+            htmlFormGuideNode = new TreeEnterpriseItem(
+              EnterpriseItemType.HTMLFormGuide,
+              childName + " [Guide]",
+              "GUIDE",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            htmlFormGuideNode.guid = childId ?? "";
+            htmlFormGuideNode.checkedOutBy = checkedOutBy ?? "";
+            htmlFormGuideNode.isSystem = isSystem ? true : false;
+            htmlFormGuideNode.children = [];
+            htmlFormGuideNode.iconPath = this.getIconForType(htmlFormGuideNode.type);
+            htmlFormGuideNode.filePath = "";
+            htmlFormGuideNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+            htmlFormGuideNode.language = language ?? "";
+
+            htmlFormsCatNode.children?.push(htmlFormGuideNode);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+
+          // create HTML form resources node
+          let htmlFormResourcesNode: TreeEnterpriseItem | undefined = htmlFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.HTMLFormResources
+          );
+
+          if (!htmlFormResourcesNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/HTMLForms/Resources/${childName}`;
+
+            htmlFormResourcesNode = new TreeEnterpriseItem(
+              EnterpriseItemType.HTMLFormResources,
+              childName + " [Resources]",
+              "XML",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            htmlFormResourcesNode.guid = childId ?? "";
+            htmlFormResourcesNode.checkedOutBy = checkedOutBy ?? "";
+            htmlFormResourcesNode.isSystem = isSystem ? true : false;
+            htmlFormResourcesNode.children = [];
+            htmlFormResourcesNode.iconPath = this.getIconForType(htmlFormResourcesNode.type);
+            htmlFormResourcesNode.filePath = "";
+            htmlFormResourcesNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+            htmlFormResourcesNode.language = language ?? "";
+
+            htmlFormsCatNode.children?.push(htmlFormResourcesNode);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+        } else if (scriptLanguage === "XFD") {
+          // create "XFD Forms" node
+          let xfdFormsCatNode: TreeEnterpriseItem | undefined = appNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === "XFD Forms" && item.type === EnterpriseItemType.XFDFormCategory
+          );
+
+          if (!xfdFormsCatNode) {
+            xfdFormsCatNode = new TreeEnterpriseItem(
+              EnterpriseItemType.XFDFormCategory,
+              "XFD Forms",
+              "",
+              `/Applications/${appCatName}/${parentName}/XFDForms`,
+              vscode.TreeItemCollapsibleState.Expanded
+            );
+
+            xfdFormsCatNode.children = [];
+            xfdFormsCatNode.iconPath = this.getIconForType(xfdFormsCatNode.type);
+            xfdFormsCatNode.scriptLanguage = "";
+            xfdFormsCatNode.guid = "";
+            xfdFormsCatNode.checkedOutBy = "";
+            xfdFormsCatNode.filePath = "";
+            xfdFormsCatNode.isSystem = false;
+
+            appNode.children?.push(xfdFormsCatNode as TreeEnterpriseItem);
+          }
+
+          // create XFD form XML node
+          let xfdFormXmlNode: TreeEnterpriseItem | undefined = xfdFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.XFDFormXML
+          );
+
+          if (!xfdFormXmlNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/XFDForms/XML/${childName}`;
+
+            xfdFormXmlNode = new TreeEnterpriseItem(
+              EnterpriseItemType.XFDFormXML,
+              childName + " [XML]",
+              "XML",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            xfdFormXmlNode.guid = childId ?? "";
+            xfdFormXmlNode.checkedOutBy = checkedOutBy ?? "";
+            xfdFormXmlNode.isSystem = isSystem ? true : false;
+            xfdFormXmlNode.children = [];
+            xfdFormXmlNode.iconPath = this.getIconForType(EnterpriseItemType.XFDFormXML);
+            xfdFormXmlNode.filePath = "";
+            xfdFormXmlNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+            xfdFormXmlNode.language = language ?? "";
+
+            xfdFormsCatNode.children?.push(xfdFormXmlNode as TreeEnterpriseItem);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+
+          // create XFD form code behind node
+          let xfdFormCodeNode: TreeEnterpriseItem | undefined = xfdFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.XFDFormCode
+          );
+
+          if (!xfdFormCodeNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/XFDForms/CodeBehind/${childName}`;
+            xfdFormCodeNode = new TreeEnterpriseItem(
+              EnterpriseItemType.XFDFormCode,
+              childName + " [Code Behind]",
+              "JS",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            xfdFormCodeNode.guid = childId ?? "";
+            xfdFormCodeNode.checkedOutBy = checkedOutBy ?? "";
+            xfdFormCodeNode.isSystem = isSystem ? true : false;
+            xfdFormCodeNode.children = [];
+            xfdFormCodeNode.iconPath = this.getIconForType(xfdFormCodeNode.type);
+            xfdFormCodeNode.filePath = "";
+            xfdFormCodeNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+            xfdFormsCatNode.children?.push(xfdFormCodeNode as TreeEnterpriseItem);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+
+          // create XFD form resources node
+          let xfdFormResourcesNode: TreeEnterpriseItem | undefined = xfdFormsCatNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.XFDFormResources
+          );
+
+          if (!xfdFormResourcesNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/XFDForms/Resources/${childName}`;
+            xfdFormResourcesNode = new TreeEnterpriseItem(
+              EnterpriseItemType.XFDFormResources,
+              childName + " [Resources]",
+              "XML",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            xfdFormResourcesNode.guid = childId ?? "";
+            xfdFormResourcesNode.checkedOutBy = checkedOutBy ?? "";
+            xfdFormResourcesNode.isSystem = isSystem ? true : false;
+            xfdFormResourcesNode.children = [];
+            xfdFormResourcesNode.iconPath = this.getIconForType(xfdFormResourcesNode.type);
+            xfdFormResourcesNode.filePath = "";
+            xfdFormResourcesNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+            xfdFormResourcesNode.language = language ?? "";
+
+            xfdFormsCatNode.children?.push(xfdFormResourcesNode as TreeEnterpriseItem);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+        }
+
+        if (childType === "AppServerScript") {
+          // create "Server Scripts" node
+          let appServerScriptsNode: TreeEnterpriseItem | undefined = appNode.children?.find(
+            (item: TreeEnterpriseItem) =>
+              item.label === "Server Scripts" && item.type === EnterpriseItemType.AppServerScriptCategory
+          );
+
+          if (!appServerScriptsNode) {
+            appServerScriptsNode = new TreeEnterpriseItem(
+              EnterpriseItemType.AppServerScriptCategory,
+              "Server Scripts",
+              "",
+              `/Applications/${appCatName}/${parentName}/ServerScripts`,
+              vscode.TreeItemCollapsibleState.Expanded
+            );
+
+            appServerScriptsNode.children = [];
+            appServerScriptsNode.iconPath = this.getIconForType(appServerScriptsNode.type);
+            appServerScriptsNode.scriptLanguage = "";
+            appServerScriptsNode.guid = "";
+            appServerScriptsNode.checkedOutBy = "";
+            appServerScriptsNode.filePath = "";
+            appServerScriptsNode.isSystem = false;
+
+            appNode.children?.push(appServerScriptsNode as TreeEnterpriseItem);
+          }
+
+          // create server script node
+          let appServerScriptNode: TreeEnterpriseItem | undefined = appServerScriptsNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.AppServerScript
+          );
+
+          if (!appServerScriptNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/ServerScripts/${childName}`;
+
+            appServerScriptNode = new TreeEnterpriseItem(
+              EnterpriseItemType.AppServerScript,
+              childName ?? "",
+              "SSL",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            appServerScriptNode.guid = childId ?? "";
+            appServerScriptNode.checkedOutBy = checkedOutBy ?? "";
+            appServerScriptNode.isSystem = isSystem ? true : false;
+            appServerScriptNode.children = [];
+            appServerScriptNode.iconPath = this.getIconForType(appServerScriptNode.type);
+            appServerScriptNode.filePath = "";
+            appServerScriptNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+            appServerScriptsNode.children?.push(appServerScriptNode as TreeEnterpriseItem);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+        }
+
+        if (childType === "AppClientScript") {
+          // create "Client Scripts" node
+          let appClientScriptsNode: TreeEnterpriseItem | undefined = appNode.children?.find(
+            (item: TreeEnterpriseItem) =>
+              item.label === "Client Scripts" && item.type === EnterpriseItemType.AppClientScriptCategory
+          );
+
+          if (!appClientScriptsNode) {
+            appClientScriptsNode = new TreeEnterpriseItem(
+              EnterpriseItemType.AppClientScriptCategory,
+              "Client Scripts",
+              "",
+              `/Applications/${appCatName}/${parentName}/ClientScripts`,
+              vscode.TreeItemCollapsibleState.Expanded
+            );
+
+            appClientScriptsNode.children = [];
+            appClientScriptsNode.iconPath = this.getIconForType(appClientScriptsNode.type);
+            appClientScriptsNode.scriptLanguage = "";
+            appClientScriptsNode.guid = "";
+            appClientScriptsNode.checkedOutBy = "";
+            appClientScriptsNode.filePath = "";
+            appClientScriptsNode.isSystem = false;
+
+            appNode.children?.push(appClientScriptsNode as TreeEnterpriseItem);
+          }
+
+          // create client script node
+          let appClientScriptNode: TreeEnterpriseItem | undefined = appClientScriptsNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.AppClientScript
+          );
+
+          if (!appClientScriptNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/ClientScripts/${childName}`;
+
+            appClientScriptNode = new TreeEnterpriseItem(
+              EnterpriseItemType.AppClientScript,
+              childName ?? "",
+              "JS",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            appClientScriptNode.guid = childId ?? "";
+            appClientScriptNode.checkedOutBy = checkedOutBy ?? "";
+            appClientScriptNode.isSystem = isSystem ? true : false;
+            appClientScriptNode.children = [];
+            appClientScriptNode.iconPath = this.getIconForType(appClientScriptNode.type);
+            appClientScriptNode.filePath = "";
+            appClientScriptNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+            appClientScriptsNode.children?.push(appClientScriptNode as TreeEnterpriseItem);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+        }
+
+        if (childType === "AppDataSourceScript") {
+          // create "Data Sources" node
+          let appDataSourcesNode: TreeEnterpriseItem | undefined = appNode.children?.find(
+            (item: TreeEnterpriseItem) =>
+              item.label === "Data Sources" && item.type === EnterpriseItemType.AppDataSourceCategory
+          );
+
+          if (!appDataSourcesNode) {
+            appDataSourcesNode = new TreeEnterpriseItem(
+              EnterpriseItemType.AppDataSourceCategory,
+              "Data Sources",
+              "",
+              `/Applications/${appCatName}/${parentName}/DataSources`,
+              vscode.TreeItemCollapsibleState.Expanded
+            );
+
+            appDataSourcesNode.children = [];
+            appDataSourcesNode.iconPath = this.getIconForType(appDataSourcesNode.type);
+            appDataSourcesNode.scriptLanguage = "";
+            appDataSourcesNode.guid = "";
+            appDataSourcesNode.checkedOutBy = "";
+            appDataSourcesNode.filePath = "";
+            appDataSourcesNode.isSystem = false;
+
+            appNode.children?.push(appDataSourcesNode as TreeEnterpriseItem);
+          }
+
+          // create data source node
+          let appDataSourceNode: TreeEnterpriseItem | undefined = appDataSourcesNode.children?.find(
+            (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.AppDataSource
+          );
+
+          if (!appDataSourceNode) {
+            let uri = `/Applications/${appCatName}/${parentName}/DataSources/${childName}`;
+            appDataSourceNode = new TreeEnterpriseItem(
+              EnterpriseItemType.AppDataSource,
+              childName ?? "",
+              scriptLanguage === "SQL" ? "SLSQL" : "SSL",
+              uri,
+              vscode.TreeItemCollapsibleState.None
+            );
+
+            appDataSourceNode.guid = childId ?? "";
+            appDataSourceNode.checkedOutBy = checkedOutBy ?? "";
+            appDataSourceNode.isSystem = isSystem ? true : false;
+            appDataSourceNode.children = [];
+            appDataSourceNode.iconPath = this.getIconForType(appDataSourceNode.type);
+            appDataSourceNode.filePath = "";
+            appDataSourceNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+            appDataSourcesNode.children?.push(appDataSourceNode as TreeEnterpriseItem);
+            this.service.setCheckedOut(uri, checkedOutBy ?? "");
+          }
+        }
+      }
+
+      if (parentType === "SSC") {
+        // create "Server Scripts" root node
+        let serverScriptsNode: TreeEnterpriseItem | undefined = data.find(
+          (item: TreeEnterpriseItem) =>
+            item.label === "Server Scripts" && item.type === EnterpriseItemType.ServerScriptCategory
+        );
+
+        if (!serverScriptsNode) {
+          serverScriptsNode = new TreeEnterpriseItem(
+            EnterpriseItemType.ServerScriptCategory,
+            "Server Scripts",
+            "",
+            "/ServerScripts/",
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          serverScriptsNode.children = [];
+          serverScriptsNode.iconPath = this.getIconForType(serverScriptsNode.type);
+          serverScriptsNode.scriptLanguage = "";
+          serverScriptsNode.guid = "";
+          serverScriptsNode.checkedOutBy = "";
+          serverScriptsNode.filePath = "";
+          serverScriptsNode.isSystem = false;
+
+          data.push(serverScriptsNode as TreeEnterpriseItem);
+        }
+
+        // create server script category node
+        let serverScriptCatNode: TreeEnterpriseItem | undefined = serverScriptsNode.children?.find(
+          (item: TreeEnterpriseItem) =>
+            item.label === parentName && item.type === EnterpriseItemType.ServerScriptCategory
+        );
+
+        if (!serverScriptCatNode) {
+          serverScriptCatNode = new TreeEnterpriseItem(
+            EnterpriseItemType.ServerScriptCategory,
+            parentName ?? "",
+            "",
+            `/ServerScripts/${parentName}/`,
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          serverScriptCatNode.children = [];
+          serverScriptCatNode.iconPath = this.getIconForType(serverScriptCatNode.type);
+          serverScriptCatNode.scriptLanguage = "";
+          serverScriptCatNode.guid = "";
+          serverScriptCatNode.checkedOutBy = "";
+          serverScriptCatNode.filePath = "";
+          serverScriptCatNode.isSystem = isSystem ? true : false;
+
+          serverScriptsNode.children?.push(serverScriptCatNode as TreeEnterpriseItem);
+        }
+
+        // create server script node
+        let serverScriptNode: TreeEnterpriseItem | undefined = serverScriptCatNode.children?.find(
+          (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.ServerScript
+        );
+
+        if (!serverScriptNode) {
+          let uri = `/ServerScripts/${parentName}/${childName}`;
+
+          serverScriptNode = new TreeEnterpriseItem(
+            EnterpriseItemType.ServerScript,
+            childName ?? "",
+            "SSL",
+            uri,
+            vscode.TreeItemCollapsibleState.None
+          );
+
+          serverScriptNode.guid = childId ?? "";
+          serverScriptNode.checkedOutBy = checkedOutBy ?? "";
+          serverScriptNode.isSystem = isSystem ? true : false;
+          serverScriptNode.children = [];
+          serverScriptNode.iconPath = this.getIconForType(serverScriptNode.type);
+          serverScriptNode.filePath = "";
+          serverScriptNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+          serverScriptCatNode.children?.push(serverScriptNode as TreeEnterpriseItem);
+          this.service.setCheckedOut(uri, checkedOutBy ?? "");
+        }
+      }
+
+      if (parentType === "CSC") {
+        // create "Client Scripts" root node
+        let clientScriptsNode: TreeEnterpriseItem | undefined = data.find(
+          (item: TreeEnterpriseItem) =>
+            item.label === "Client Scripts" && item.type === EnterpriseItemType.ClientScriptCategory
+        );
+
+        if (!clientScriptsNode) {
+          clientScriptsNode = new TreeEnterpriseItem(
+            EnterpriseItemType.ClientScriptCategory,
+            "Client Scripts",
+            "",
+            "/ClientScripts/",
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          clientScriptsNode.children = [];
+          clientScriptsNode.iconPath = this.getIconForType(clientScriptsNode.type);
+          clientScriptsNode.scriptLanguage = "";
+          clientScriptsNode.guid = "";
+          clientScriptsNode.checkedOutBy = "";
+          clientScriptsNode.filePath = "";
+          clientScriptsNode.isSystem = false;
+
+          data.push(clientScriptsNode as TreeEnterpriseItem);
+        }
+
+        // create client script category node
+        let clientScriptCatNode: TreeEnterpriseItem | undefined = clientScriptsNode.children?.find(
+          (item: TreeEnterpriseItem) =>
+            item.label === parentName && item.type === EnterpriseItemType.ClientScriptCategory
+        );
+
+        if (!clientScriptCatNode) {
+          clientScriptCatNode = new TreeEnterpriseItem(
+            EnterpriseItemType.ClientScriptCategory,
+            parentName ?? "",
+            "",
+            `/ClientScripts/${parentName}/`,
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          clientScriptCatNode.children = [];
+          clientScriptCatNode.iconPath = this.getIconForType(clientScriptCatNode.type);
+          clientScriptCatNode.scriptLanguage = "";
+          clientScriptCatNode.guid = "";
+          clientScriptCatNode.checkedOutBy = "";
+          clientScriptCatNode.filePath = "";
+          clientScriptCatNode.isSystem = isSystem ? true : false;
+
+          clientScriptsNode.children?.push(clientScriptCatNode as TreeEnterpriseItem);
+        }
+
+        // create client script node
+        let clientScriptNode: TreeEnterpriseItem | undefined = clientScriptCatNode.children?.find(
+          (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.ClientScript
+        );
+
+        if (!clientScriptNode) {
+          let uri = `/ClientScripts/${parentName}/${childName}`;
+
+          clientScriptNode = new TreeEnterpriseItem(
+            EnterpriseItemType.ClientScript,
+            childName ?? "",
+            "JS",
+            uri,
+            vscode.TreeItemCollapsibleState.None
+          );
+
+          clientScriptNode.guid = childId ?? "";
+          clientScriptNode.checkedOutBy = checkedOutBy ?? "";
+          clientScriptNode.isSystem = isSystem ? true : false;
+          clientScriptNode.children = [];
+          clientScriptNode.iconPath = this.getIconForType(clientScriptNode.type);
+          clientScriptNode.filePath = "";
+          clientScriptNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+          clientScriptCatNode.children?.push(clientScriptNode as TreeEnterpriseItem);
+          this.service.setCheckedOut(uri, checkedOutBy ?? "");
+        }
+      }
+
+      if (parentType === "DSC") {
+        // create "Data Sources" category node
+        let dataSourcesNode: TreeEnterpriseItem | undefined = data.find(
+          (item: TreeEnterpriseItem) =>
+            item.label === "Data Sources" && item.type === EnterpriseItemType.DataSourceCategory
+        );
+
+        if (!dataSourcesNode) {
+          dataSourcesNode = new TreeEnterpriseItem(
+            EnterpriseItemType.DataSourceCategory,
+            "Data Sources",
+            "",
+            "/DataSources/",
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          dataSourcesNode.children = [];
+          dataSourcesNode.iconPath = this.getIconForType(dataSourcesNode.type);
+          dataSourcesNode.scriptLanguage = "";
+          dataSourcesNode.guid = "";
+          dataSourcesNode.checkedOutBy = "";
+          dataSourcesNode.filePath = "";
+          dataSourcesNode.isSystem = isSystem ? true : false;
+
+          data.push(dataSourcesNode as TreeEnterpriseItem);
+        }
+
+        // create data source category node
+        let dataSourceCatNode: TreeEnterpriseItem | undefined = dataSourcesNode.children?.find(
+          (item: TreeEnterpriseItem) => item.label === parentName && item.type === EnterpriseItemType.DataSourceCategory
+        );
+
+        if (!dataSourceCatNode) {
+          dataSourceCatNode = new TreeEnterpriseItem(
+            EnterpriseItemType.DataSourceCategory,
+            parentName ?? "",
+            "",
+            `/DataSources/${parentName}/`,
+            vscode.TreeItemCollapsibleState.Expanded
+          );
+
+          dataSourceCatNode.children = [];
+          dataSourceCatNode.iconPath = this.getIconForType(dataSourceCatNode.type);
+          dataSourceCatNode.scriptLanguage = "";
+          dataSourceCatNode.guid = "";
+          dataSourceCatNode.checkedOutBy = "";
+          dataSourceCatNode.filePath = "";
+          dataSourceCatNode.isSystem = isSystem ? true : false;
+
+          dataSourcesNode.children?.push(dataSourceCatNode as TreeEnterpriseItem);
+        }
+
+        // create data source node
+        let dataSourceNode: TreeEnterpriseItem | undefined = dataSourceCatNode.children?.find(
+          (item: TreeEnterpriseItem) => item.label === childName && item.type === EnterpriseItemType.DataSource
+        );
+
+        if (!dataSourceNode) {
+          let uri = `/DataSources/${parentName}/${childName}`;
+
+          dataSourceNode = new TreeEnterpriseItem(
+            EnterpriseItemType.DataSource,
+            childName ?? "",
+            scriptLanguage === "SQL" ? "SLSQL" : "SSL",
+            uri,
+            vscode.TreeItemCollapsibleState.None
+          );
+
+          dataSourceNode.guid = childId ?? "";
+          dataSourceNode.checkedOutBy = checkedOutBy ?? "";
+          dataSourceNode.isSystem = isSystem ? true : false;
+          dataSourceNode.children = [];
+          dataSourceNode.iconPath = this.getIconForType(dataSourceNode.type);
+          dataSourceNode.filePath = "";
+          dataSourceNode.tooltip = `Checked out by ${checkedOutBy} on ${checkedOutDate}`;
+
+          dataSourceCatNode.children?.push(dataSourceNode as TreeEnterpriseItem);
+          this.service.setCheckedOut(uri, checkedOutBy ?? "");
+        }
+      }
+    }
+    return data as TreeEnterpriseItem[];
+  }
+}

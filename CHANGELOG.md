@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0] - 2026-08-30
+
+- 增加 `starlimsvscode` MCP/SCM_API 与 `starlims-devtools` MCP/SCM 的不可变源码快照。
+- 增加逐文件 SHA-256、离线完整性校验和显式快照导入工具。
+- README 改为完整中英文双语，并明确共享核心、Vendor 与产品 Adapter 的边界。
+
 ## [0.1.2] - 2026-08-30
 
 - 将 ESM、CommonJS 和类型声明产物纳入 GitHub 标签，支持直接使用标签压缩包安装。

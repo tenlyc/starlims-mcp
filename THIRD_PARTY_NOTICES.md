@@ -6,6 +6,8 @@ which is distributed under the MIT License.
 
 Copyright (c) 2018-2023 Marius Popovici, Christoph Döllinger.
 
-The upstream source is not silently merged into this repository. Imported SCM
-artifacts must retain their original copyright notice, license, source commit,
-and integrity manifest.
+The reviewed MCP and SCM_API source is preserved as an immutable Vendor
+snapshot at commit `92b9014244eb09a56ed589db5155c3b7914b70a2`.
+The snapshot retains its original license, source commit, and per-file
+integrity manifest. It is archival and compatibility material, not a claim of
+ownership and not a location for project-specific edits.

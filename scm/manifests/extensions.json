@@ -11,7 +11,8 @@
       "component": "STARLIMS_DEVTOOLS_API",
       "namespace": "STARLIMS_DEVTOOLS_API.*",
       "owner": "tenlyc/starlims-devtools",
-      "status": "external-product-extension"
+      "status": "external-product-extension",
+      "snapshot": "vendor/starlims-devtools/8c344a729ab836e050534c864400aaf753cc5f37/src/scm_api/Server Scripts/STARLIMS_DEVTOOLS_API"
     }
   ]
 }

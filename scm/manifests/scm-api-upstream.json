@@ -5,6 +5,8 @@
   "branch": "master",
   "commit": "92b9014244eb09a56ed589db5155c3b7914b70a2",
   "license": "MIT",
-  "mode": "reference-only",
-  "policy": "Import upstream artifacts unchanged and retain license, source commit and checksums."
+  "mode": "vendored-immutable-snapshot",
+  "snapshot": "vendor/starlimsvscode/92b9014244eb09a56ed589db5155c3b7914b70a2",
+  "filesManifestSha256": "9ffab37ee9208c6460384c75f7006dc0cf5c83522bc44f8b6a70f08e469701c0",
+  "policy": "Preserve upstream artifacts unchanged with their license, source commit and per-file checksums."
 }

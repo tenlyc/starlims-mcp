@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-30T02:17:44.739Z",
+  "snapshots": [
+    {
+      "id": "starlims-devtools",
+      "sourceRepository": "tenlyc/starlims-devtools",
+      "sourceCommit": "8c344a729ab836e050534c864400aaf753cc5f37",
+      "path": "starlims-devtools/8c344a729ab836e050534c864400aaf753cc5f37",
+      "license": "MIT",
+      "fileCount": 253,
+      "totalBytes": 1146493,
+      "filesManifestSha256": "3eacb05cbd1c47bbf5d4ee2815848babdea80278f9f0aab8314202cb86ac0006"
+    },
+    {
+      "id": "starlimsvscode",
+      "sourceRepository": "MrDoe/starlimsvscode",
+      "sourceCommit": "92b9014244eb09a56ed589db5155c3b7914b70a2",
+      "path": "starlimsvscode/92b9014244eb09a56ed589db5155c3b7914b70a2",
+      "license": "MIT",
+      "fileCount": 254,
+      "totalBytes": 1565934,
+      "filesManifestSha256": "9ffab37ee9208c6460384c75f7006dc0cf5c83522bc44f8b6a70f08e469701c0"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "starlimsvscode",
+  "sourceRepository": "MrDoe/starlimsvscode",
+  "sourceUrl": "https://github.com/MrDoe/starlimsvscode",
+  "sourceCommit": "92b9014244eb09a56ed589db5155c3b7914b70a2",
+  "license": "MIT",
+  "capturedAt": "2026-08-30T02:17:40.829Z",
+  "immutable": true,
+  "includedPaths": [
+    "LICENSE.md",
+    "src/backend/SCM_API",
+    "src/backend/SCM_API.sdp",
+    "src/services",
+    "src/providers",
+    "src/test",
+    "src/extension.ts"
+  ],
+  "fileCount": 254,
+  "totalBytes": 1565934,
+  "filesManifestSha256": "9ffab37ee9208c6460384c75f7006dc0cf5c83522bc44f8b6a70f08e469701c0",
+  "notes": [
+    "The upstream package.json is intentionally not mirrored because the reviewed commit contains an abnormally large, corrupted metadata blob.",
+    "The snapshot preserves the MCP implementation, its local service/provider dependencies, tests, and the complete SCM_API source and SDP artifact."
+  ]
+}

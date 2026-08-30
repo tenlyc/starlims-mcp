@@ -1,0 +1,808 @@
+import { randomUUID } from "crypto";
+import type { Request, Response } from "express";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import * as z from "zod/v4";
+import { StarlimsAutomationResult, StarlimsAutomationService } from "./starlimsAutomationService";
+import { RemoteScriptOutputType } from "./ticketManagementTypes";
+
+type StarlimsMcpOptions = {
+  getEnabled: () => boolean;
+  getIncludeStructuredDataInText: () => boolean;
+  getVersion: () => string;
+  logError: (message: string, error?: unknown) => void;
+  logInfo: (message: string) => void;
+  requestIntegrationTestPermission: (reason?: string) => Promise<{ granted: boolean; reason: string }>;
+  runIntegrationTests: () => Promise<StarlimsAutomationResult>;
+};
+
+type McpSession = {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+};
+
+const toolResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional()
+}).catchall(z.unknown());
+
+const browseTreeInputSchema = z.object({
+  uri: z.string().optional().describe("STARLIMS folder URI. Leave empty to browse the root tree."),
+  maxItems: z.number().int().positive().optional().describe("Optional maximum number of items to return.")
+});
+
+const searchByNameInputSchema = z.object({
+  query: z.string().describe("Name or partial name of the STARLIMS item to search for."),
+  itemType: z.string().optional().describe("Optional STARLIMS item type filter, for example APPSS or HTMLFORMCODE."),
+  exactMatch: z.boolean().optional().describe("Set to true to require an exact name match."),
+  maxItems: z.number().int().positive().optional().describe("Optional maximum number of search results to return.")
+});
+
+const globalCodeSearchInputSchema = z.object({
+  searchString: z.string().describe("Text to search for across STARLIMS code items."),
+  itemTypes: z.array(z.string()).optional().describe("Optional STARLIMS item type codes to restrict the search. Leave empty to search all code item types."),
+  maxItems: z.number().int().positive().optional().describe("Optional maximum number of search results to return.")
+});
+
+const getItemCodeInputSchema = z.object({
+  uri: z.string().describe("STARLIMS item URI."),
+  language: z.string().optional().describe("Optional form language identifier when reading form code. Defaults to GER for form items when omitted."),
+  maxCharacters: z.number().int().positive().optional().describe("Optional maximum number of characters to return. Omit to return the full output without truncation")
+});
+
+const checkoutItemInputSchema = z.object({
+  uri: z.string().describe("STARLIMS item URI."),
+  language: z.string().optional().describe("Optional form language identifier for form checkout. Defaults to GER for form items when omitted.")
+});
+
+const saveItemInputSchema = z.object({
+  localPath: z.string().describe("Absolute path to the edited local STARLIMS working copy."),
+  language: z.string().optional().describe("Optional form language identifier override when saving form items. Defaults to GER for form items when omitted.")
+});
+
+const refreshCheckoutTreeInputSchema = z.object({
+  includeAllUsers: z.boolean().optional().describe("Set to true to refresh the checked-out tree for all users instead of just the current user.")
+});
+
+const listLanguagesInputSchema = z.object({
+  maxItems: z.number().int().positive().optional().describe("Optional maximum number of languages to return.")
+});
+
+const executeServerScriptInputSchema = z.object({
+  uri: z.string().describe("STARLIMS server script URI."),
+  parameters: z.array(z.unknown()).optional().describe("Optional positional parameters passed to the server script."),
+  outputType: z.enum(["ARRAY", "JSON", "XML"]).optional().describe("Requested output type. Defaults to ARRAY."),
+  entryPoint: z.string().optional().describe("Optional procedure or entry point to invoke within the server script."),
+  maxCharacters: z.number().int().positive().optional().describe("Optional maximum number of characters to return. Omit to return the full output without truncation")
+});
+
+const executeDataSourceInputSchema = z.object({
+  uri: z.string().describe("STARLIMS data source URI."),
+  parameters: z.array(z.unknown()).optional().describe("Optional positional parameters passed to the data source."),
+  outputType: z.enum(["ARRAY", "JSON", "XML"]).optional().describe("Requested output type. Defaults to ARRAY."),
+  maxCharacters: z.number().int().positive().optional().describe("Optional maximum number of characters to return. Defaults to the STARLIMS.mcp.maxScriptCharacters setting for server scripts and is unlimited for data sources unless maxRows applies."),
+  maxRows: z.number().int().positive().optional().describe("Optional maximum number of data rows to return (excluding the header row). Defaults to the STARLIMS.mcp.maxDataSourceRows setting. Only applies to ARRAY output.")
+});
+
+const checkinItemInputSchema = z.object({
+  uri: z.string().describe("STARLIMS item URI."),
+  reason: z.string().describe("Check-in reason."),
+  language: z.string().optional().describe("Optional form language identifier for form check-in. Defaults to GER for form items when omitted.")
+});
+
+const undoCheckoutInputSchema = z.object({
+  uri: z.string().describe("STARLIMS item URI.")
+});
+
+const getTableDefinitionInputSchema = z.object({
+  uri: z.string().describe("STARLIMS table URI."),
+  maxCharacters: z.number().int().positive().optional().describe("Optional maximum number of characters to return. Omit to return the full output without truncation")
+});
+
+const checkoutTableInputSchema = z.object({
+  uri: z.string().describe("STARLIMS table URI.")
+});
+
+const checkinTableInputSchema = z.object({
+  uri: z.string().describe("STARLIMS table URI."),
+  reason: z.string().describe("Check-in reason.")
+});
+
+const addTableInputSchema = z.object({
+  tableName: z.string().describe("New table name."),
+  dsn: z.string().describe("Target table location, usually DATABASE or DICTIONARY.")
+});
+
+const editTableInputSchema = z.object({
+  uri: z.string().describe("STARLIMS table URI."),
+  tableXml: z.string().describe("Full serialized table XML.")
+});
+
+const createItemInputSchema = z.object({
+  itemName: z.string().describe("New item name."),
+  itemType: z
+    .string()
+    .describe(
+      "STARLIMS item type, for example SS, APPSS, HTMLFORMXML, APPDS, or CS. Application item types (APP, APPSS, APPDS, APPCS, forms) require a valid categoryName/appName; global types (SS, DS, CS) require a categoryName and appName=N/A."
+    ),
+  language: z
+    .string()
+    .describe(
+      "Item language. Use SQL for data sources (DS/APPDS), SSL for STARLIMS server scripts (SS/APPSS), JS for client scripts (CS/APPCS), and a form language like GER for forms. Never pass N/A for code items - the backend falls back to the correct default (SQL for data sources) but the local sync depends on a valid language."
+    ),
+  categoryName: z
+    .string()
+    .describe(
+      "For application items: the APPLICATION CATEGORY (the parent folder of the app under /Applications, e.g. BMBH_Modules - NOT the literal string 'app'). For global items (SS/DS/CS): the category folder name (e.g. BMBH). Browse /Applications or search_by_name to get the real category. A wrong category silently aborts creation."
+    ),
+  appName: z
+    .string()
+    .describe(
+      "For application items: the application name under the category (e.g. BMBH_Ticketmanagement, from the URI /Applications/<category>/<appName>/...). Use N/A for global items and categories."
+    )
+});
+
+const runIntegrationTestsInputSchema = z.object({
+  reason: z.string().optional().describe("Optional explanation shown to the user when asking permission to run integration tests."),
+  maxCharacters: z.number().int().positive().optional().describe("Optional maximum number of characters to return. Omit to return the full output without truncation")
+});
+
+const readLogInputSchema = z.object({
+  user: z.string().optional().describe("STARLIMS user name whose log to read. Defaults to the current user configured in starlimsvscode."),
+  maxLines: z.number().int().positive().optional().describe("Optional maximum number of lines to return from the log.")
+});
+
+const transferItemInputSchema = z.object({
+  targetServer: z.string().describe("Name of the configured STARLIMS target server (STARLIMS.servers) to transfer the checked out items to."),
+  saveLocalEdits: z.boolean().optional().describe("Set to true to push local working copy edits of the checked out items to the source server before exporting. Defaults to true.")
+});
+
+export class StarlimsMcpServer {
+  private readonly sessions = new Map<string, McpSession>();
+
+  constructor(
+    private readonly automationService: StarlimsAutomationService,
+    private readonly options: StarlimsMcpOptions
+  ) { }
+
+  public async handleRequest(req: Request, res: Response): Promise<void> {
+    if (!this.options.getEnabled()) {
+      this.respondWithError(res, 404, -32004, "The STARLIMS MCP endpoint is disabled in settings.", req.body);
+      return;
+    }
+
+    if (req.method !== "POST" && req.method !== "GET" && req.method !== "DELETE") {
+      this.respondWithError(res, 405, -32000, "Method not allowed.", req.body);
+      return;
+    }
+
+    const sessionId = req.header("Mcp-Session-Id");
+    let session: McpSession | undefined = sessionId ? this.sessions.get(sessionId) : undefined;
+
+    if (!session) {
+      if (sessionId) {
+        this.options.logInfo(`Rejected request for unknown MCP session '${sessionId}'.`);
+        this.respondWithError(res, 404, -32001, `Session not found: ${sessionId}`, req.body);
+        return;
+      }
+
+      if (!isInitializeRequest(req.body)) {
+        this.respondWithError(
+          res,
+          400,
+          -32000,
+          "Bad Request: Mcp-Session-Id header is required. Initialize a session first with an initialize request.",
+          req.body
+        );
+        return;
+      }
+
+      session = await this.createSession();
+    }
+
+    try {
+      if (isInitializeRequest(req.body)) {
+        this.options.logInfo("STARLIMS MCP client initialized.");
+      }
+
+      await session.transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      this.options.logError("Failed to handle STARLIMS MCP request.", error);
+      if (!res.headersSent) {
+        this.respondWithError(res, 500, -32603, "Internal MCP server error.", req.body);
+      }
+    }
+  }
+
+  private async createSession(): Promise<McpSession> {
+    const server = this.createServer();
+    const transport = new StreamableHTTPServerTransport({
+      enableJsonResponse: true,
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (generatedSessionId) => {
+        this.sessions.set(generatedSessionId, { server, transport });
+        this.options.logInfo(`STARLIMS MCP session ${generatedSessionId} initialized.`);
+      },
+      onsessionclosed: (closedSessionId) => {
+        this.sessions.delete(closedSessionId);
+        this.options.logInfo(`STARLIMS MCP session ${closedSessionId} closed.`);
+        void server.close().catch((error) => {
+          this.options.logError("Failed to close STARLIMS MCP server.", error);
+        });
+      }
+    });
+
+    await server.connect(transport);
+    return { server, transport };
+  }
+
+  private createServer(): McpServer {
+    const server = new McpServer(
+      {
+        name: "starlims-vscode",
+        version: this.options.getVersion()
+      },
+      {
+        capabilities: {
+          logging: {},
+          tools: {}
+        }
+      }
+    );
+
+    server.registerTool(
+      "browse_tree",
+      {
+        annotations: { readOnlyHint: true },
+        description: "Browse STARLIMS items under a folder URI or from the root tree.",
+        inputSchema: browseTreeInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, maxItems }) => this.executeTool(
+        "browse_tree",
+        { maxItems, uri },
+        () => this.automationService.browseTree(uri, maxItems),
+        (result) => {
+        const actual = Array.isArray(result.items) ? result.items.length : 0;
+        const total = this.toCount(result.totalItems);
+        return actual < total
+          ? `Retrieved ${actual} of ${total} item(s) from ${this.toUriLabel(result.uri)}.`
+          : `Retrieved ${actual} item(s) from ${this.toUriLabel(result.uri)}.`;
+      }
+      )
+    );
+
+    server.registerTool(
+      "search_by_name",
+      {
+        annotations: { readOnlyHint: true },
+        description: "Search STARLIMS items by name or partial name.",
+        inputSchema: searchByNameInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ query, itemType, exactMatch, maxItems }) => this.executeTool(
+        "search_by_name",
+        { exactMatch, itemType, maxItems, query },
+        () => this.automationService.searchByName(query, itemType, exactMatch, maxItems),
+        (result) => `Found ${this.toCount(result.totalItems)} matching item(s) for '${query}'.`
+      )
+    );
+
+    server.registerTool(
+      "global_code_search",
+      {
+        annotations: { readOnlyHint: true },
+        description: "Search for text across STARLIMS code items.",
+        inputSchema: globalCodeSearchInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ searchString, itemTypes, maxItems }) => this.executeTool(
+        "global_code_search",
+        { itemTypes, maxItems, searchString },
+        () => this.automationService.globalCodeSearch(searchString, itemTypes, maxItems),
+        (result) => `Found ${this.toCount(result.totalItems)} code match(es) for '${searchString}'.`
+      )
+    );
+
+    server.registerTool(
+      "list_languages",
+      {
+        annotations: { readOnlyHint: true },
+        description: "List the STARLIMS languages available for form checkout and code retrieval.",
+        inputSchema: listLanguagesInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ maxItems }) => this.executeTool(
+        "list_languages",
+        { maxItems },
+        () => this.automationService.listLanguages(maxItems),
+        (result) => `Retrieved ${this.toCount(result.totalItems)} language option(s).`
+      )
+    );
+
+    server.registerTool(
+      "get_item_code",
+      {
+        annotations: { readOnlyHint: true },
+        description: "Read code for a STARLIMS item.",
+        inputSchema: getItemCodeInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, language, maxCharacters }) => this.executeTool(
+        "get_item_code",
+        { language, maxCharacters, uri },
+        () => this.automationService.getItemCode(uri, language, maxCharacters),
+        (result) => `Retrieved ${this.toCount(result.totalCharacters)} character(s) from ${this.toUriLabel(result.uri)}.`
+      )
+    );
+
+    server.registerTool(
+      "read_log",
+      {
+        annotations: { readOnlyHint: true },
+        description: "Read the STARLIMS server log file for a specified user (default: current user).",
+        inputSchema: readLogInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ user, maxLines }) => this.executeTool(
+        "read_log",
+        { maxLines, user },
+        () => this.automationService.readLog(user, maxLines),
+        (result) => `Retrieved ${this.toCount(result.totalLines)} line(s) from log for user '${result.user}'.`
+      )
+    );
+
+    server.registerTool(
+      "checkout_item",
+      {
+        description: "Check out a STARLIMS item and sync the local working copy into the SLVSCODE workspace.",
+        inputSchema: checkoutItemInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, language }) => this.executeTool(
+        "checkout_item",
+        { language, uri },
+        () => this.automationService.checkoutItem(uri, language),
+        (result) => `Checked out ${this.toUriLabel(result.uri)} to ${typeof result.localPath === "string" ? result.localPath : "the local workspace"}.`
+      )
+    );
+
+    server.registerTool(
+      "save_item",
+      {
+        description: "Save an edited local STARLIMS working copy back to the remote STARLIMS item.",
+        inputSchema: saveItemInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ localPath, language }) => this.executeTool(
+        "save_item",
+        { language, localPath },
+        () => this.automationService.saveItem(localPath, language),
+        (result) => `Saved ${this.toUriLabel(result.uri)} from ${typeof result.localPath === "string" ? result.localPath : "the local workspace"}.`
+      )
+    );
+
+    server.registerTool(
+      "refresh_checkout_tree",
+      {
+        description: "Refresh the checked-out tree in VS Code from the STARLIMS server.",
+        inputSchema: refreshCheckoutTreeInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ includeAllUsers }) => this.executeTool(
+        "refresh_checkout_tree",
+        { includeAllUsers },
+        () => this.automationService.refreshCheckoutTree(includeAllUsers === true),
+        (result) => `Refreshed the checked-out tree${result.includeAllUsers === true ? " for all users" : ""}.`
+      )
+    );
+
+    server.registerTool(
+      "checkin_item",
+      {
+        description: "Check in a STARLIMS enterprise item after local edits are complete.",
+        inputSchema: checkinItemInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, reason, language }) => this.executeTool(
+        "checkin_item",
+        { language, reason, uri },
+        () => this.automationService.checkinItem(uri, reason, language),
+        (result) => `Checked in ${this.toUriLabel(result.uri)}.`
+      )
+    );
+
+    server.registerTool(
+      "undo_checkout",
+      {
+        description: "Undo checkout of a STARLIMS item and discard the active checkout on the server.",
+        inputSchema: undoCheckoutInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri }) => this.executeTool(
+        "undo_checkout",
+        { uri },
+        () => this.automationService.undoCheckout(uri),
+        (result) => `Undid checkout for ${this.toUriLabel(result.uri)}.`
+      )
+    );
+
+    server.registerTool(
+      "execute_server_script",
+      {
+        description: "Execute a STARLIMS server script and return the captured output.",
+        inputSchema: executeServerScriptInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, parameters, outputType, entryPoint, maxCharacters }) => this.executeTool(
+        "execute_server_script",
+        { entryPoint, maxCharacters, outputType, parameters, uri },
+        () => this.automationService.executeServerScript(
+          uri,
+          parameters,
+          outputType as RemoteScriptOutputType | undefined,
+          entryPoint,
+          maxCharacters
+        ),
+        (result) => `Executed ${this.toUriLabel(result.uri)} and captured ${this.toCount(result.totalCharacters)} character(s) of output.`
+      )
+    );
+
+    server.registerTool(
+      "execute_data_source",
+      {
+        description: "Execute a STARLIMS data source and return the captured output.",
+        inputSchema: executeDataSourceInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, parameters, outputType, maxCharacters, maxRows }) => this.executeTool(
+        "execute_data_source",
+        { maxCharacters, maxRows, outputType, parameters, uri },
+        () => this.automationService.executeDataSource(
+          uri,
+          parameters,
+          outputType as RemoteScriptOutputType | undefined,
+          maxCharacters,
+          maxRows
+        ),
+        (result) => `Executed ${this.toUriLabel(result.uri)} and captured ${this.toCount(result.totalCharacters)} character(s) of output.`
+      )
+    );
+
+    server.registerTool(
+      "create_item",
+      {
+        description:
+          "Create a STARLIMS enterprise item. For application items (APP, APPSS, APPDS, APPCS, forms) pass the APPLICATION CATEGORY as categoryName (parent of the app under /Applications, e.g. BMBH_Modules - never the literal 'app') and the app name as appName. For global items (SS, DS, CS) pass the category and appName=N/A. Language: SQL for data sources, SSL for STARLIMS server scripts, JS for client scripts, GER/ENG for forms.",
+        inputSchema: createItemInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ appName, categoryName, itemName, itemType, language }) => this.executeTool(
+        "create_item",
+        { appName, categoryName, itemName, itemType, language },
+        () => this.automationService.createItem(itemName, itemType, language, categoryName, appName),
+        (result) => `Created ${typeof result.itemType === "string" ? result.itemType : "item"} ${typeof result.itemName === "string" ? result.itemName : ""}.`
+      )
+    );
+
+    server.registerTool(
+      "get_table_definition",
+      {
+        annotations: { readOnlyHint: true },
+        description: "Read the full XML table definition for a STARLIMS table.",
+        inputSchema: getTableDefinitionInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, maxCharacters }) => this.executeTool(
+        "get_table_definition",
+        { maxCharacters, uri },
+        () => this.automationService.getTableDefinition(uri, maxCharacters),
+        (result) => `Retrieved ${this.toCount(result.totalCharacters)} character(s) from ${this.toUriLabel(result.uri)}.`
+      )
+    );
+
+    server.registerTool(
+      "checkout_table",
+      {
+        description: "Check out a STARLIMS table and sync the local XML working copy into the SLVSCODE workspace.",
+        inputSchema: checkoutTableInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri }) => this.executeTool(
+        "checkout_table",
+        { uri },
+        () => this.automationService.checkoutTable(uri),
+        (result) => `Checked out ${this.toUriLabel(result.uri)} to ${typeof result.localPath === "string" ? result.localPath : "the local workspace"}.`
+      )
+    );
+
+    server.registerTool(
+      "checkin_table",
+      {
+        description: "Check in a STARLIMS table.",
+        inputSchema: checkinTableInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, reason }) => this.executeTool(
+        "checkin_table",
+        { reason, uri },
+        () => this.automationService.checkinTable(uri, reason),
+        (result) => `Checked in ${this.toUriLabel(result.uri)}.`
+      )
+    );
+
+    server.registerTool(
+      "create_table",
+      {
+        description: "Create a new STARLIMS table.",
+        inputSchema: addTableInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ tableName, dsn }) => this.executeTool(
+        "create_table",
+        { dsn, tableName },
+        () => this.automationService.addTable(tableName, dsn),
+        (result) => `Created table ${typeof result.tableName === "string" ? result.tableName : ""} in ${typeof result.dsn === "string" ? result.dsn : "the target location"}.`
+      )
+    );
+
+    server.registerTool(
+      "edit_table",
+      {
+        description: "Save a modified STARLIMS table XML definition.",
+        inputSchema: editTableInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ uri, tableXml }) => this.executeTool(
+        "edit_table",
+        { uri, tableXml },
+        () => this.automationService.editTable(uri, tableXml),
+        (result) => `Saved ${this.toUriLabel(result.uri)}.`
+      )
+    );
+
+    server.registerTool(
+      "run_integration_tests",
+      {
+        description: "Run the VS Code extension integration tests (`npm test`). The extension always prompts the local user for permission before starting the test run.",
+        inputSchema: runIntegrationTestsInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ reason, maxCharacters }) => this.runIntegrationTestsTool(reason, maxCharacters)
+    );
+
+    server.registerTool(
+      "transfer_item_to_server",
+      {
+        description: "Transfer all checked out items of the current user to another configured STARLIMS server. Exports an SDP package from the source server and imports it on the target server, automatically generating a new version of each item on the target. Optionally pushes local working copy edits to the source server first. Items on the source server remain checked out.",
+        inputSchema: transferItemInputSchema,
+        outputSchema: toolResultSchema
+      },
+      async ({ targetServer, saveLocalEdits }) => this.executeTool(
+        "transfer_item_to_server",
+        { saveLocalEdits, targetServer },
+        () => this.automationService.transferItems(targetServer, saveLocalEdits),
+        (result) => {
+          const targetLabel = typeof result.targetServer === "string" && result.targetServer.length > 0
+            ? result.targetServer
+            : "the target server";
+          const itemCount = this.toCount(result.totalItems);
+          return itemCount > 0
+            ? `Transferred ${itemCount} checked-out item(s) to '${targetLabel}'. New versions were created on the target server.`
+            : `Transferred the checked out items to '${targetLabel}'. New versions were created on the target server.`;
+        }
+      )
+    );
+
+    return server;
+  }
+
+  private respondWithError(
+    res: Response,
+    statusCode: number,
+    errorCode: number,
+    message: string,
+    body: unknown
+  ): void {
+    res.status(statusCode).json({
+      error: {
+        code: errorCode,
+        message
+      },
+      id: this.getRequestId(body),
+      jsonrpc: "2.0"
+    });
+  }
+
+  private getRequestId(body: unknown): unknown {
+    if (body && typeof body === "object" && "id" in body) {
+      return (body as { id?: unknown }).id ?? null;
+    }
+
+    return null;
+  }
+
+  private toCount(value: unknown): number {
+    return typeof value === "number" && Number.isFinite(value) ? value : 0;
+  }
+
+  private async executeTool(
+    toolName: string,
+    input: Record<string, unknown>,
+    operation: () => Promise<StarlimsAutomationResult>,
+    successMessageFactory: (result: StarlimsAutomationResult) => string
+  ) {
+    this.options.logInfo(`${toolName} request ${this.stringifyForLog(input)}`);
+    let result: StarlimsAutomationResult;
+    try {
+      result = await operation();
+    } catch (error: any) {
+      this.options.logError(`${toolName} threw an exception: ${error?.message ?? error}`);
+      result = { ok: false, error: error?.message ?? "Unknown error." };
+    }
+    this.options.logInfo(
+      result.ok
+        ? `${toolName} completed successfully.`
+        : `${toolName} failed: ${result.error ?? "Unknown STARLIMS error."}`
+    );
+
+    return this.toToolResult(result, successMessageFactory);
+  }
+
+  private stringifyForLog(value: Record<string, unknown>): string {
+    const serializedValue = JSON.stringify(value);
+    if (!serializedValue) {
+      return "";
+    }
+
+    return serializedValue.length > 500 ? `${serializedValue.slice(0, 497)}...` : serializedValue;
+  }
+
+  private toToolResult(
+    result: StarlimsAutomationResult,
+    successMessageFactory: (result: StarlimsAutomationResult) => string
+  ) {
+    let text = result.ok ? successMessageFactory(result) : result.error ?? "STARLIMS operation failed.";
+    // Append warning to visible text if present (always meaningful for AI agents)
+    if (result.warning) {
+      text += `\nWARNING: ${result.warning}`;
+    }
+    // Append info/note to visible text if present
+    if (result.info) {
+      text += `\n${result.info}`;
+    } else if (result.note) {
+      text += `\nNote: ${result.note}`;
+    }
+    // Make truncation visible — a cut-off result must not look complete
+    if (result.truncated === true) {
+      text += `\n${this.formatTruncationNote(result)}`;
+    }
+    // Include the full payload in the visible text so clients that only read
+    // content[].text (opencode, Claude Desktop, generic aggregators) receive
+    // the actual items/code/output instead of just a summary.
+    if (result.ok && this.options.getIncludeStructuredDataInText()) {
+      const serialized = this.serializeResultForText(result);
+      if (serialized) {
+        text += `\n\n--- Structured result ---\n${serialized}`;
+      }
+    }
+
+    return {
+      content: [
+        {
+          text,
+          type: "text" as const
+        }
+      ],
+      isError: !result.ok,
+      structuredContent: result
+    };
+  }
+
+  private serializeResultForText(result: StarlimsAutomationResult): string {
+    try {
+      return JSON.stringify(result);
+    } catch (error) {
+      this.options.logError("Failed to serialize STARLIMS MCP tool result for text content.", error);
+      return "";
+    }
+  }
+
+  private formatTruncationNote(result: StarlimsAutomationResult): string {
+    const limit = this.toCount(result.maxCharacters) || this.toCount(result.limit) || this.toCount(result.maxLines);
+    const total = this.toCount(result.totalCharacters) || this.toCount(result.totalItems) || this.toCount(result.totalLines);
+    const range = limit > 0 && total > 0
+      ? `${limit} of ${total}`
+      : limit > 0
+        ? String(limit)
+        : total > 0
+          ? String(total)
+          : undefined;
+    return `TRUNCATED: the result was cut off${range ? ` (${range})` : ""}. Omit maxCharacters/maxItems or increase the limit to receive the full result.`;
+  }
+
+  private async runIntegrationTestsTool(reason: string | undefined, maxCharacters?: number) {
+    const permission = await this.options.requestIntegrationTestPermission(reason);
+    if (!permission.granted) {
+      return this.toToolResult(
+        {
+          ok: false,
+          error: permission.reason,
+          permissionGranted: false,
+          permissionRequired: true
+        },
+        (result) => result.error ?? "Integration test execution was not permitted."
+      );
+    }
+
+    this.options.logInfo("run_integration_tests request accepted by user.");
+    const result = await this.options.runIntegrationTests();
+    const boundedOutput = this.limitTextOutput(this.getIntegrationTestOutput(result), maxCharacters);
+    const structuredContent: StarlimsAutomationResult = {
+      ...result,
+      maxCharacters: boundedOutput.maxCharacters,
+      output: boundedOutput.text,
+      totalCharacters: boundedOutput.totalCharacters,
+      truncated: boundedOutput.truncated
+    };
+
+    return this.toToolResult(
+      structuredContent,
+      (toolResult) => toolResult.ok
+        ? `Integration tests completed successfully with ${this.toCount(toolResult.totalCharacters)} character(s) of captured output.`
+        : toolResult.error ?? "Integration tests failed."
+    );
+  }
+
+  private getIntegrationTestOutput(result: StarlimsAutomationResult): string {
+    const sections: string[] = [];
+
+    if (typeof result.command === "string" && result.command.length > 0) {
+      sections.push(`Command: ${result.command}`);
+    }
+
+    if (typeof result.cwd === "string" && result.cwd.length > 0) {
+      sections.push(`Working directory: ${result.cwd}`);
+    }
+
+    if (typeof result.stdout === "string" && result.stdout.length > 0) {
+      sections.push(`STDOUT:\n${result.stdout}`);
+    }
+
+    if (typeof result.stderr === "string" && result.stderr.length > 0) {
+      sections.push(`STDERR:\n${result.stderr}`);
+    }
+
+    return sections.join("\n\n").trim();
+  }
+
+  private limitTextOutput(text: string, maxCharacters?: number): {
+    maxCharacters: number;
+    text: string;
+    totalCharacters: number;
+    truncated: boolean;
+  } {
+    const totalCharacters = text.length;
+    if (maxCharacters === undefined || !Number.isFinite(maxCharacters)) {
+      return {
+        maxCharacters: totalCharacters,
+        text,
+        totalCharacters,
+        truncated: false
+      };
+    }
+
+    const safeMax = Math.max(1, Math.floor(maxCharacters));
+    return {
+      maxCharacters: safeMax,
+      text: text.length > safeMax ? text.slice(0, safeMax) : text,
+      totalCharacters,
+      truncated: text.length > safeMax
+    };
+  }
+
+  private toUriLabel(uri: unknown): string {
+    return typeof uri === "string" && uri.length > 0 ? uri : "the STARLIMS root";
+  }
+}

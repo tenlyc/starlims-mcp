@@ -1,6 +1,6 @@
 {
   "name": "@tenlyc/starlims-mcp",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Shared STARLIMS MCP contracts and host-neutral server runtime",
   "type": "module",
   "main": "cjs/index.js",
@@ -16,6 +16,7 @@
     "dist",
     "cjs",
     "scm",
+    "vendor",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
@@ -23,7 +24,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json",
     "prepare": "npm run build",
-    "test": "npm run build && node --test dist/tests/*.test.js",
+    "test": "npm run build && node --test dist/tests/*.test.js && npm run vendor:verify",
+    "vendor:verify": "node scripts/verify-vendor.mjs",
+    "vendor:index": "node scripts/rebuild-vendor-index.mjs",
     "check": "npm run test"
   },
   "repository": "https://github.com/tenlyc/starlims-mcp",
