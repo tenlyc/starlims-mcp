@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.2] - 2026-08-30
+
+- 将 ESM、CommonJS 和类型声明产物纳入 GitHub 标签，支持直接使用标签压缩包安装。
+
 ## [0.1.1] - 2026-08-30
 
 - 同时发布 ESM 与 CommonJS 运行时入口，兼容 Electron、VS Code 和独立 Node 宿主。

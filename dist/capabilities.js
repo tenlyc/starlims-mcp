@@ -1,0 +1,15 @@
+import { getProfileTools } from './catalog.js';
+export async function buildCapabilityDocument(options) {
+    const tools = getProfileTools(options.profile, options.adapter.capabilities);
+    const backend = options.adapter.backendComponents ? await options.adapter.backendComponents() : [];
+    return {
+        server: options.serverName || 'starlims-mcp',
+        version: options.version,
+        profile: options.profile,
+        adapter: options.adapter.id,
+        capabilities: [...options.adapter.capabilities],
+        tools: tools.map(({ id, title, origin, risk, capability, schemaVersion }) => ({ id, title, origin, risk, capability, schemaVersion })),
+        backend: [...backend]
+    };
+}
+//# sourceMappingURL=capabilities.js.map
