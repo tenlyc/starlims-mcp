@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- 增加完整的中英文 MCP 接口目录，说明参数、风险、Capability、Profile、来源、独立 Adapter 支持情况、工具数量和推荐操作流程。
+
 ## [0.4.0] - 2026-08-30
 
 - 增加可执行 CLI、stdio 与 Streamable HTTP 传输，支持脱离宿主独立运行。

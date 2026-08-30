@@ -48,5 +48,10 @@
     "run_integration_tests",
     "transfer_item_to_server"
   ],
-  "starlims-mcp": ["get_capabilities"]
+  "starlims-mcp": [
+    "get_capabilities",
+    "get_form_resources",
+    "save_form_resources",
+    "set_form_resource"
+  ]
 }

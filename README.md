@@ -98,6 +98,129 @@ At runtime, call `get_capabilities` to inspect the complete provenance of every 
 
 Call `get_capabilities` after connecting to inspect active tools, provenance, risk, schema versions, Adapter capabilities, and backend component versions.
 
+## MCP 接口目录 / MCP tool reference
+
+当前统一目录包含 **27 个业务工具**，Server 另外注册 1 个能力发现工具 `get_capabilities`，因此完整契约最多为 **28 个工具**。实际客户端看到的数量由 `Profile ∩ Adapter capabilities ∩ permission policy` 决定，并不表示缺失的工具发生了故障。
+
+The unified catalog currently contains **27 business tools**. The server registers one additional discovery tool, `get_capabilities`, for a maximum contract of **28 tools**. The actual list visible to a client is the intersection of the selected profile, Adapter capabilities, and permission policy; an omitted tool is not necessarily a server failure.
+
+常见数量 / Common counts:
+
+| 运行方式 / Runtime | 工具数量 / Tool count | 说明 / Notes |
+| --- | ---: | --- |
+| 独立 HTTP Adapter，`read-only` | 8 | 7 个读取工具 + `get_capabilities` / 7 read tools plus discovery |
+| 独立 HTTP Adapter，`allow-writes` | 13 | 再增加签出、保存、Resources 写入和签入 / adds checkout, save, Resources writes, and check-in |
+| STARLIMS DevTools Adapter | 19 | 18 个 DevTools Profile 工具 + `get_capabilities` / 18 profile tools plus discovery |
+| 完整 `unified` Profile | 最多 27 | 26 个业务工具 + `get_capabilities`，仍受 Adapter 过滤 / 26 business tools plus discovery, still Adapter-filtered |
+| 完整 `vscode-compat` Profile | 最多 26 | 25 个业务工具 + `get_capabilities` / 25 business tools plus discovery |
+
+参数约定 / Parameter conventions:
+
+- `uri` 是企业树、搜索或签出列表返回的 STARLIMS URI；不要根据名称自行拼接。
+
+  `uri` is the authoritative STARLIMS URI returned by browse, search, or checkout tools; clients should not invent it from a display name.
+- `language` 用于 HTML/XFD Form 的明确语言，例如 `CHS`、`ENG`。Resources 工具中该参数必填。
+
+  `language` selects an explicit HTML/XFD Form language such as `CHS` or `ENG`; it is required for Resources tools.
+- `maxItems`、`maxRows` 和 `maxCharacters` 用于限制上下文大小；返回结果会说明总量以及是否截断。
+
+  `maxItems`, `maxRows`, and `maxCharacters` bound model context; responses report totals and truncation where applicable.
+- `expectedVersion` 是读取结果返回的内容 SHA-256 指纹。写入时携带它可阻止覆盖已经变化的远端内容。
+
+  `expectedVersion` is the content SHA-256 fingerprint returned by a read. Supplying it on a write prevents overwriting remote content that has changed.
+
+### 能力发现 / Capability discovery
+
+| 工具 / Tool | 参数 / Parameters | 风险 / Risk | 可用范围 / Availability | 说明 / Description |
+| --- | --- | --- | --- | --- |
+| `get_capabilities` | 无 / none | `read` | 所有 Server / every server | 返回 Server、Profile、Adapter、已启用 capability、工具来源/风险/Schema 和后端组件版本。Returns server, profile, Adapter, enabled capabilities, tool provenance/risk/schema, and backend component versions. |
+
+### 通用读取工具 / Shared read tools
+
+| 工具 / Tool | 主要参数 / Main parameters | Capability | 独立 Adapter / Standalone | 说明 / Description |
+| --- | --- | --- | --- | --- |
+| `browse_tree` | `uri?`, `maxItems?` | `items.browse` | ✅ | 浏览根目录或指定目录的企业树项目。Browse enterprise items from the root or below a folder URI. |
+| `search_by_name` | `query`, `itemType?`, `exactMatch?`, `maxItems?` | `items.search` | ✅ | 按项目名称搜索，可限定类型和精确匹配。Search by item name with optional type and exact-match filters. |
+| `global_code_search` | `searchString`, `itemTypes?`, `maxItems?` | `code.search` | ✅ | 跨 STARLIMS 代码项搜索文本。Search text across STARLIMS code items. |
+| `list_languages` | `maxItems?` | `languages.list` | ✅ | 列出可用于表单的语言 ID 和名称。List available form language identifiers and names. |
+| `get_item_code` | `uri`, `language?`, `maxCharacters?` | `code.read` | ✅ | 读取远端权威代码；写入前应先调用。Read authoritative remote code; call before editing. |
+| `get_form_resources` | `uri`, `language`, `includeXml?`, `maxCharacters?` | `forms.resources.read` | ✅ | 读取指定语言的 Resources，返回版本指纹和结构化资源条目，可选返回完整 XML。Read one language, returning a version fingerprint, structured entries, and optional XML. |
+| `read_log` | `user?`, `maxLines?` | `logs.read` | — | 读取 STARLIMS Server Log；当前由 DevTools/兼容宿主提供。Read the STARLIMS server log; currently host-provided. |
+| `get_table_definition` | `uri`, `maxCharacters?` | `tables.read` | ✅ | 读取完整表定义 XML。Read a complete table-definition XML document. |
+
+这些共享契约主要源自固定版本的 `MrDoe/starlimsvscode`；`get_form_resources` 是 `tenlyc/starlims-mcp` 原创能力。详细来源以 `get_capabilities.tools[].provenance` 为准。
+
+Most shared contracts are derived from the pinned `MrDoe/starlimsvscode` source. `get_form_resources` is original to `tenlyc/starlims-mcp`. Use `get_capabilities.tools[].provenance` as the authoritative record.
+
+### 通用写入与执行工具 / Shared write and execution tools
+
+| 工具 / Tool | 主要参数 / Main parameters | 风险 / Risk | Capability | 独立 Adapter / Standalone | 说明 / Description |
+| --- | --- | --- | --- | --- | --- |
+| `checkout_item` | `uri`, `language?` | `write` | `checkout.write` | ✅ 写入模式 / write mode | 编辑前签出项目。Check out an item before editing. |
+| `save_item` | `uri`, `code`, `language?`, `expectedVersion?` | `write` | `code.write` | ✅ 写入模式 / write mode | 保存完整代码，不是局部 Patch；支持版本冲突检查和写后回读。Save complete code, not a partial patch, with conflict detection and read-back verification. |
+| `save_form_resources` | `uri`, `language`, `resourceXml`, `expectedVersion?` | `write` | `forms.resources.write` | ✅ 写入模式 / write mode | 保存指定语言的完整 Resources XML，适合批量修改。Save the complete Resources XML for one language, intended for bulk edits. |
+| `set_form_resource` | `uri`, `language`, `resourceId`, `resourceValue`, `expectedVersion?` | `write` | `forms.resources.write` | ✅ 写入模式 / write mode | 新增或修改单个 ResourceValue，并保留其他资源。Create or update one ResourceValue while preserving all other entries. |
+| `checkin_item` | `uri`, `reason`, `language?` | `write` | `checkout.checkin` | ✅ 写入模式 / write mode | 用明确原因签入项目。Check in an item with an explicit reason. |
+| `undo_checkout` | `uri` | `destructive` | `checkout.undo` | — | 撤销签出，可能丢失未保存内容，必须明确授权。Undo checkout; may discard work and requires explicit approval. |
+| `execute_server_script` | `uri`, `parameters?`, `outputType?`, `entryPoint?`, `maxCharacters?` | `execute` | `scripts.execute` | — | 执行 Server Script 并返回受限输出。Execute a Server Script and return bounded output. |
+| `execute_data_source` | `uri`, `parameters?`, `outputType?`, `maxRows?`, `maxCharacters?` | `execute` | `datasource.execute` | — | 执行 Data Source 并限制返回行数/字符数。Execute a Data Source with row and character limits. |
+
+`—` 表示当前通用契约存在，但 v0.4.0 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
+
+`—` means the unified contract exists but the v0.4.0 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
+
+推荐远端编辑顺序 / Recommended remote-edit sequence:
+
+```text
+search_by_name or browse_tree
+  → get_item_code / get_form_resources
+  → checkout_item
+  → save_item / set_form_resource / save_form_resources (with expectedVersion)
+  → read again and verify
+  → checkin_item only when the user explicitly requests it
+```
+
+### DevTools 专属工具 / DevTools-specific tools
+
+这些工具来自 `tenlyc/starlims-devtools`，只属于 `unified` 和 `devtools` Profile，并由 DevTools 当前登录会话实现。
+
+These tools originate in `tenlyc/starlims-devtools`, belong only to the `unified` and `devtools` profiles, and are implemented through the active DevTools session.
+
+| 工具 / Tool | 参数 / Parameters | 风险 / Risk | Capability | 说明 / Description |
+| --- | --- | --- | --- | --- |
+| `list_checked_out_items` | `includeAllUsers?` | `read` | `checkout.list` | 列出当前用户或所有用户的签出项目。List checked-out items for the current user or all users. |
+| `query_checkin_history` | `user`, `dateFrom`, `dateTo` | `read` | `scm.history` | 按用户和 `YYYY-MM-DD` 日期范围查询签入历史。Query check-in history by user and `YYYY-MM-DD` date range. |
+
+### VS Code 兼容工具 / VS Code compatibility tools
+
+这些工具来自或兼容 `MrDoe/starlimsvscode`，主要用于 `unified` 和 `vscode-compat` Profile。它们不会自动出现在 DevTools Profile，也没有全部由当前独立 HTTP Adapter 实现。
+
+These tools originate from or preserve compatibility with `MrDoe/starlimsvscode`, primarily for the `unified` and `vscode-compat` profiles. They are not automatically exposed by the DevTools profile, and the current standalone HTTP Adapter does not implement all of them.
+
+| 工具 / Tool | 参数 / Parameters | 风险 / Risk | Profile | 说明 / Description |
+| --- | --- | --- | --- | --- |
+| `refresh_checkout_tree` | `includeAllUsers?` | `write` | `unified`, `vscode-compat` | 刷新 VS Code 签出工作区镜像。Refresh the VS Code checked-out workspace mirror. |
+| `vscode_save_local_item` | `localPath`, `language?` | `write` | `vscode-compat` | 按 VS Code 本地工作副本路径保存；Adapter 内映射到 `save_item`。Save by local working-copy path; mapped to `save_item` by the Adapter. |
+| `create_item` | `itemName`, `itemType`, `language`, `categoryName`, `appName` | `write` | `unified`, `vscode-compat` | 创建企业树项目。Create an enterprise item. |
+| `checkout_table` | `uri` | `write` | `unified`, `vscode-compat` | 签出表。Check out a table. |
+| `checkin_table` | `uri`, `reason` | `write` | `unified`, `vscode-compat` | 签入表。Check in a table. |
+| `create_table` | `tableName`, `dsn` | `write` | `unified`, `vscode-compat` | 创建数据库或字典表。Create a database or dictionary table. |
+| `edit_table` | `uri`, `tableXml` | `write` | `unified`, `vscode-compat` | 保存完整表定义 XML。Save a complete table-definition XML document. |
+| `run_integration_tests` | `reason?`, `maxCharacters?` | `execute` | `unified`, `vscode-compat` | 经明确授权运行宿主集成测试。Run host integration tests after explicit approval. |
+| `transfer_item_to_server` | `targetServer`, `saveLocalEdits?` | `write` | `unified`, `vscode-compat` | 将签出项传输到另一台已配置服务器。Transfer checked-out items to another configured server. |
+
+### 返回值与错误 / Results and errors
+
+- 成功调用同时返回文本内容和 `structuredContent`，结构化结果包含 `ok: true`。
+
+  Successful calls return both text content and `structuredContent`; structured results include `ok: true`.
+- 工具失败返回 MCP `isError: true` 和可读错误信息，不应被客户端当作成功结果继续执行。
+
+  Tool failures return MCP `isError: true` with a readable message and must not be treated as successful output.
+- `get_capabilities` 是 Server 元工具，不属于 `STARLIMS_TOOL_CATALOG` 的 27 个业务契约，因此目录测试或 Profile 统计需要单独加 1。
+
+  `get_capabilities` is a server-level meta tool rather than one of the 27 business contracts in `STARLIMS_TOOL_CATALOG`, so catalog/profile counts must add it separately.
+
 ### 多语言表单资源 / Multilingual form resources
 
 共享契约提供三个显式携带 `language` 的工具：
