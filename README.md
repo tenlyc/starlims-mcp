@@ -72,6 +72,26 @@ Every tool declares an `origin`:
 
 Call `get_capabilities` after connecting to inspect active tools, provenance, risk, schema versions, Adapter capabilities, and backend component versions.
 
+### 多语言表单资源 / Multilingual form resources
+
+共享契约提供三个显式携带 `language` 的工具：
+
+The shared contract provides three tools that always carry an explicit `language`:
+
+- `get_form_resources`：读取完整 Resources XML，并返回结构化的 `ResourceId`、`ResourceValue` 和 `Guid`。
+
+  Reads the complete Resources XML and returns structured `ResourceId`, `ResourceValue`, and `Guid` entries.
+- `set_form_resource`：只新增或修改一个资源值，保留文档中的其他资源。
+
+  Creates or updates one resource value while preserving the rest of the document.
+- `save_form_resources`：保存经过调用方编辑的完整 Resources XML，适用于批量修改。
+
+  Saves a complete caller-edited Resources XML document for bulk changes.
+
+这些工具使用企业树或签出列表返回的 `/HTMLForms/Resources/...` URI。写入仍由宿主权限和内容版本门禁控制。
+
+These tools use the `/HTMLForms/Resources/...` URI returned by browse or checkout operations. Writes remain subject to host approvals and content-version gates.
+
 ## SCM 命名空间 / SCM namespaces
 
 | Namespace | 中文策略 | English policy |

@@ -13,6 +13,9 @@ test('profiles preserve host compatibility without conflicting save schemas', ()
     assert.ok(!devtools.includes('vscode_save_local_item'));
     assert.ok(vscode.includes('vscode_save_local_item'));
     assert.ok(vscode.includes('save_item'));
+    assert.ok(devtools.includes('get_form_resources'));
+    assert.ok(devtools.includes('save_form_resources'));
+    assert.ok(devtools.includes('set_form_resource'));
 });
 test('capability document exposes only tools implemented by the adapter', async () => {
     const document = await buildCapabilityDocument({

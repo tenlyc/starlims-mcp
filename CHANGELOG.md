@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.0] - 2026-08-30
+
+- 增加显式指定语言的 HTML/XFD Form Resources 结构化读取、完整 XML 保存和单资源更新契约。
+- 契约保持宿主无关：DevTools 可立即实现，`starlimsvscode` 后续可接入相同能力。
+
 ## [0.2.0] - 2026-08-30
 
 - 增加 `starlimsvscode` MCP/SCM_API 与 `starlims-devtools` MCP/SCM 的不可变源码快照。
