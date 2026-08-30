@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "component": "STARLIMS_MCP_API",
+      "namespace": "STARLIMS_MCP_API.*",
+      "owner": "tenlyc/starlims-mcp",
+      "status": "reserved"
+    },
+    {
+      "component": "STARLIMS_DEVTOOLS_API",
+      "namespace": "STARLIMS_DEVTOOLS_API.*",
+      "owner": "tenlyc/starlims-devtools",
+      "status": "external-product-extension"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "profile": "devtools",
+  "host": "tenlyc/starlims-devtools",
+  "writeContract": {
+    "tool": "save_item",
+    "arguments": ["uri", "code", "language", "expectedVersion"]
+  },
+  "policy": "Host applies approvals, fingerprints, diagnostics, tests and remote conflict checks."
+}

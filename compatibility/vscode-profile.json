@@ -1,0 +1,10 @@
+{
+  "profile": "vscode-compat",
+  "host": "MrDoe/starlimsvscode",
+  "writeContract": {
+    "tool": "vscode_save_local_item",
+    "adapterTool": "save_item",
+    "arguments": ["localPath", "language"]
+  },
+  "policy": "Compatibility alias preserves the SLVSCODE local-working-copy workflow."
+}

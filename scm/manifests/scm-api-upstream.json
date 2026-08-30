@@ -1,0 +1,10 @@
+{
+  "component": "SCM_API",
+  "namespace": "SCM_API.*",
+  "source": "https://github.com/MrDoe/starlimsvscode",
+  "branch": "master",
+  "commit": "92b9014244eb09a56ed589db5155c3b7914b70a2",
+  "license": "MIT",
+  "mode": "reference-only",
+  "policy": "Import upstream artifacts unchanged and retain license, source commit and checksums."
+}

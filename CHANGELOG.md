@@ -1,0 +1,9 @@
+# Changelog
+
+## [0.1.0] - 2026-08-30
+
+- 建立统一 STARLIMS MCP 工具目录和来源标记。
+- 增加 `unified`、`devtools`、`vscode-compat` Profile。
+- 增加宿主 Adapter 接口与 MCP Server 工厂。
+- 增加 `get_capabilities` 能力与后端版本握手。
+- 建立上游 SCM、公共扩展和 DevTools 扩展的独立命名空间。
