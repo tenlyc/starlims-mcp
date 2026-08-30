@@ -1,4 +1,4 @@
-export type StarlimsToolOrigin = 'shared' | 'starlimsvscode' | 'starlims-devtools' | 'starlims-mcp';
+export type StarlimsToolOrigin = 'starlimsvscode' | 'starlims-mcp';
 export type StarlimsToolRisk = 'read' | 'write' | 'execute' | 'destructive';
 export type StarlimsMcpProfile = 'unified' | 'devtools' | 'vscode-compat';
 export type StarlimsSourceRelationship = 'upstream-compatible' | 'derived-from-upstream' | 'original';
@@ -35,6 +35,7 @@ export interface StarlimsToolSummary {
   risk: StarlimsToolRisk;
   capability: string;
   schemaVersion: string;
+  profiles: readonly StarlimsMcpProfile[];
 }
 
 export interface StarlimsCapabilityDocument {

@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-30
+
 - 增加完整的中英文 MCP 接口目录，说明参数、风险、Capability、Profile、来源、独立 Adapter 支持情况、工具数量和推荐操作流程。
+- 工具来源收敛为 `starlimsvscode` 与 `starlims-mcp` 两类；DevTools 改为 Profile/Adapter，并将其已有自有工具归入 `starlims-mcp`。
+- 能力握手增加 `profiles`，将代码归属与宿主可用性明确分离。
 
 ## [0.4.0] - 2026-08-30
 

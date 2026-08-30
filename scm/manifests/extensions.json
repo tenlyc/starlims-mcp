@@ -1,18 +1,29 @@
 {
-  "schemaVersion": 1,
-  "components": [
+  "schemaVersion": 2,
+  "deployment": {
+    "component": "SCM_API",
+    "namespace": "SCM_API.*",
+    "artifact": "SCM_API.sdp",
+    "strategy": "merge-pinned-upstream-and-owned-extensions"
+  },
+  "sources": [
     {
-      "component": "STARLIMS_MCP_API",
-      "namespace": "STARLIMS_MCP_API.*",
-      "owner": "tenlyc/starlims-mcp",
-      "status": "reserved"
+      "owner": "MrDoe/starlimsvscode",
+      "origin": "starlimsvscode",
+      "prefix": "regular upstream names",
+      "relationship": "derived-from-upstream"
     },
     {
-      "component": "STARLIMS_DEVTOOLS_API",
-      "namespace": "STARLIMS_DEVTOOLS_API.*",
-      "owner": "tenlyc/starlims-devtools",
-      "status": "external-product-extension",
-      "snapshot": "vendor/starlims-devtools/8c344a729ab836e050534c864400aaf753cc5f37/src/scm_api/Server Scripts/STARLIMS_DEVTOOLS_API"
+      "owner": "tenlyc/starlims-mcp",
+      "origin": "starlims-mcp",
+      "prefix": "Mcp",
+      "relationship": "original",
+      "scripts": [
+        "McpGetSCMUsers",
+        "McpGetCheckInHistory",
+        "McpExportPackage",
+        "McpImportPackage"
+      ]
     }
   ]
 }

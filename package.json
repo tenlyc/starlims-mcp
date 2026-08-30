@@ -1,6 +1,6 @@
 {
   "name": "@tenlyc/starlims-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Standalone and embeddable MCP server for STARLIMS development tools",
   "type": "module",
   "main": "cjs/index.js",
@@ -25,6 +25,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json",
+    "build:devtools-server": "node scripts/build-devtools-server.mjs",
     "prepare": "npm run build",
     "test": "npm run build && node --test dist/tests/*.test.js && npm run vendor:verify",
     "vendor:verify": "node scripts/verify-vendor.mjs",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.9.3"
   }
 }

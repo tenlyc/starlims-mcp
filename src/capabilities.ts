@@ -21,7 +21,7 @@ export async function buildCapabilityDocument(options: {
     profile: options.profile,
     adapter: options.adapter.id,
     capabilities: [...options.adapter.capabilities],
-    tools: tools.map(({ id, title, origin, provenance, risk, capability, schemaVersion }) => ({ id, title, origin, provenance, risk, capability, schemaVersion })),
+    tools: tools.map(({ id, title, origin, provenance, risk, capability, schemaVersion, profiles }) => ({ id, title, origin, provenance, risk, capability, schemaVersion, profiles })),
     backend: [...backend]
   };
 }

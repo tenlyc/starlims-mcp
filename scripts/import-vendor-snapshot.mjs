@@ -46,7 +46,7 @@ const profiles = {
     ],
     notes: [
       'This is an implementation snapshot, not a runtime dependency.',
-      'The complete DevTools SCM tree is retained because it contains the upstream-compatible SCM_API overlay and STARLIMS_DEVTOOLS_API extensions.'
+      'The complete historical DevTools SCM tree is retained for recovery and provenance. Current owned extensions are cataloged under the single merged SCM_API deployment model.'
     ]
   }
 };

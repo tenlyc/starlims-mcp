@@ -9,7 +9,8 @@ test('catalog has unique ids and explicit provenance', () => {
   assert.ok(STARLIMS_TOOL_CATALOG.every((tool) => tool.provenance.repository && tool.provenance.owner && tool.provenance.license));
   assert.equal(findToolContract('browse_tree')?.provenance.repository, 'https://github.com/MrDoe/starlimsvscode');
   assert.equal(findToolContract('get_form_resources')?.provenance.repository, 'https://github.com/tenlyc/starlims-mcp');
-  assert.equal(findToolContract('list_checked_out_items')?.provenance.repository, 'https://github.com/tenlyc/starlims-devtools');
+  assert.equal(findToolContract('list_checked_out_items')?.provenance.repository, 'https://github.com/tenlyc/starlims-mcp');
+  assert.deepEqual([...new Set(STARLIMS_TOOL_CATALOG.map((tool) => tool.origin))].sort(), ['starlims-mcp', 'starlimsvscode']);
 });
 
 test('profiles preserve host compatibility without conflicting save schemas', () => {
@@ -39,4 +40,5 @@ test('capability document exposes only tools implemented by the adapter', async 
   assert.equal(document.backend[0]?.name, 'SCM_API');
   assert.equal(document.serverProvenance.repository, 'https://github.com/tenlyc/starlims-mcp');
   assert.equal(document.tools[0]?.provenance.repository, 'https://github.com/MrDoe/starlimsvscode');
+  assert.deepEqual(document.tools[0]?.profiles, ['unified', 'devtools', 'vscode-compat']);
 });

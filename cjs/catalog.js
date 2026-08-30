@@ -53,13 +53,7 @@ const mcpProvenance = {
     license: 'MIT',
     relationship: 'original'
 };
-const devtoolsProvenance = {
-    repository: 'https://github.com/tenlyc/starlims-devtools',
-    owner: 'tenlyc/starlims-devtools',
-    license: 'MIT',
-    relationship: 'original'
-};
-const shared = (id, title, description, risk, capability, inputSchema, provenance = upstreamProvenance) => ({ id, title, description, origin: 'shared', provenance, risk, capability, schemaVersion: '1.0', profiles: allProfiles, inputSchema });
+const shared = (id, title, description, risk, capability, inputSchema, provenance = upstreamProvenance) => ({ id, title, description, origin: provenance === upstreamProvenance ? 'starlimsvscode' : 'starlims-mcp', provenance, risk, capability, schemaVersion: '1.0', profiles: allProfiles, inputSchema });
 const owned = (contract, provenance) => ({ ...contract, provenance });
 const uri = z.string().min(1).describe('STARLIMS enterprise item URI.');
 const language = z.string().optional().describe('Optional STARLIMS form language identifier.');
@@ -82,8 +76,8 @@ exports.STARLIMS_TOOL_CATALOG = [
     shared('undo_checkout', 'Undo checkout', 'Undo checkout for a STARLIMS item.', 'destructive', 'checkout.undo', z.object({ uri })),
     shared('execute_server_script', 'Execute server script', 'Execute a STARLIMS server script.', 'execute', 'scripts.execute', z.object({ uri, parameters: z.array(z.unknown()).optional(), outputType: z.enum(['ARRAY', 'JSON', 'XML']).optional(), entryPoint: z.string().optional(), maxCharacters })),
     shared('execute_data_source', 'Execute data source', 'Execute a STARLIMS data source.', 'execute', 'datasource.execute', z.object({ uri, parameters: z.array(z.unknown()).optional(), outputType: z.enum(['ARRAY', 'JSON', 'XML']).optional(), maxCharacters, maxRows: z.number().int().positive().optional() })),
-    owned({ id: 'list_checked_out_items', title: 'List checked-out items', description: 'List checked-out STARLIMS items.', origin: 'starlims-devtools', risk: 'read', capability: 'checkout.list', schemaVersion: '1.0', profiles: ['unified', 'devtools'], inputSchema: z.object({ includeAllUsers: z.boolean().optional() }) }, devtoolsProvenance),
-    owned({ id: 'query_checkin_history', title: 'Query check-in history', description: 'Query STARLIMS Source Control Manager history.', origin: 'starlims-devtools', risk: 'read', capability: 'scm.history', schemaVersion: '1.0', profiles: ['unified', 'devtools'], inputSchema: z.object({ user: z.string().min(1), dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }) }, devtoolsProvenance),
+    owned({ id: 'list_checked_out_items', title: 'List checked-out items', description: 'List checked-out STARLIMS items.', origin: 'starlims-mcp', risk: 'read', capability: 'checkout.list', schemaVersion: '1.0', profiles: ['unified', 'devtools'], inputSchema: z.object({ includeAllUsers: z.boolean().optional() }) }, mcpProvenance),
+    owned({ id: 'query_checkin_history', title: 'Query check-in history', description: 'Query STARLIMS Source Control Manager history.', origin: 'starlims-mcp', risk: 'read', capability: 'scm.history', schemaVersion: '1.0', profiles: ['unified', 'devtools'], inputSchema: z.object({ user: z.string().min(1), dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }) }, mcpProvenance),
     owned({ id: 'refresh_checkout_tree', title: 'Refresh checkout tree', description: 'Refresh the starlimsvscode checked-out workspace mirror.', origin: 'starlimsvscode', risk: 'write', capability: 'checkout.refresh', schemaVersion: '1.0', profiles: ['unified', 'vscode-compat'], inputSchema: z.object({ includeAllUsers: z.boolean().optional() }) }, upstreamProvenance),
     owned({ id: 'vscode_save_local_item', title: 'Save local workspace item', description: 'Compatibility tool that saves a starlimsvscode local working-copy path.', origin: 'starlimsvscode', risk: 'write', capability: 'code.write.local', schemaVersion: '1.0', profiles: ['vscode-compat'], adapterTool: 'save_item', inputSchema: z.object({ localPath: z.string().min(1), language }) }, upstreamProvenance),
     owned({ id: 'create_item', title: 'Create item', description: 'Create a STARLIMS enterprise item.', origin: 'starlimsvscode', risk: 'write', capability: 'items.create', schemaVersion: '1.0', profiles: ['unified', 'vscode-compat'], inputSchema: z.object({ itemName: z.string().min(1), itemType: z.string().min(1), language: z.string().min(1), categoryName: z.string().min(1), appName: z.string().min(1) }) }, upstreamProvenance),

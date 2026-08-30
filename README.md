@@ -44,7 +44,7 @@ AI client
    └── future tools        CLI, web, test runner, other STARLIMS products
              │
              ▼
-SCM_API / STARLIMS_MCP_API / product-specific backend extensions
+one merged SCM_API namespace (upstream base + starlims-mcp `Mcp*` extensions)
 ```
 
 嵌入模式下由宿主负责登录凭据、服务器选择、权限确认和实际 API 调用；独立模式使用本仓库提供的 HTTP Adapter，并从环境变量或本地配置读取连接信息。无论哪种模式，只有 Adapter 声明支持且服务端权限策略允许的能力才会注册为 MCP 工具。
@@ -59,18 +59,16 @@ In embedded mode the host owns credentials, server selection, approval UX, and A
 | `devtools` | 保持 DevTools 的 `uri + code + language` 写入契约 | Preserves the DevTools `uri + code + language` write contract |
 | `vscode-compat` | 保留 VS Code 本地工作副本兼容接口 | Preserves VS Code local-working-copy compatibility |
 
-每个工具都包含 `origin`：
+每个工具都包含表示代码归属的 `origin`，值只保留两个：
 
 Every tool declares an `origin`:
 
-- `shared`：多个宿主共同采用的稳定契约 / stable contracts shared by multiple hosts.
-- `starlimsvscode`：VS Code 专属兼容能力 / VS Code-specific compatibility behavior.
-- `starlims-devtools`：DevTools 产品专属能力 / DevTools product-specific behavior.
-- `starlims-mcp`：本仓库独立发展的公共能力 / public capabilities developed by this repository.
+- `starlimsvscode`：源自或派生自 `MrDoe/starlimsvscode` 的基础能力 / foundational capabilities sourced or derived from `MrDoe/starlimsvscode`.
+- `starlims-mcp`：由本仓库维护的全部自有能力，包括最初在 DevTools 中实现的能力 / all capabilities maintained here, including capabilities first implemented in DevTools.
 
-`origin` 只表示工具面向哪些宿主或兼容 Profile，不再被用来推断代码所有权。每个工具还包含机器可读的 `provenance`：
+宿主可用性由独立的 `profiles` 字段表达，因此 DevTools 只是 `devtools` Profile 和 Adapter，不是第三种工具来源。每个工具还包含机器可读的 `provenance`：
 
-`origin` only describes host/profile availability and must not be used to infer code ownership. Every tool also carries machine-readable `provenance` metadata:
+Host availability is expressed separately by `profiles`, so DevTools is a profile and Adapter rather than a third tool origin. Every tool also carries machine-readable `provenance` metadata:
 
 - `repository`：实际来源或维护仓库 / source or maintaining repository.
 - `owner`：维护方 / maintainer.
@@ -87,8 +85,7 @@ Current ownership is:
 | 来源 / Source | 工具 / Tools | 说明 / Notes |
 | --- | --- | --- |
 | [`MrDoe/starlimsvscode`](https://github.com/MrDoe/starlimsvscode) | `browse_tree`, `search_by_name`, `global_code_search`, `list_languages`, `get_item_code`, `read_log`, `get_table_definition`, `checkout_item`, `save_item`, `checkin_item`, `undo_checkout`, `execute_server_script`, `execute_data_source`，以及 VS Code 兼容工具 | 基于固定上游提交适配为宿主无关契约；保留 MIT 来源与提交 / adapted from a pinned MIT-licensed upstream commit |
-| [`tenlyc/starlims-mcp`](https://github.com/tenlyc/starlims-mcp) | `get_capabilities`, `get_form_resources`, `save_form_resources`, `set_form_resource` | 本仓库独立开发的共享能力 / original shared capabilities maintained here |
-| [`tenlyc/starlims-devtools`](https://github.com/tenlyc/starlims-devtools) | `list_checked_out_items`, `query_checkin_history` | DevTools 原创产品能力，经统一 Profile 暴露 / original DevTools capabilities exposed through the unified profile |
+| [`tenlyc/starlims-mcp`](https://github.com/tenlyc/starlims-mcp) | `get_capabilities`, `get_form_resources`, `save_form_resources`, `set_form_resource`, `list_checked_out_items`, `query_checkin_history` | 本仓库维护的自有能力；后两项当前仅由 DevTools Profile/Adapter 提供 / capabilities maintained here; the last two are currently available through the DevTools profile/adapter |
 
 工具实际执行时可调用 `get_capabilities` 查看每个已启用工具的完整来源，而不必依赖 README 的静态列表。
 
@@ -165,9 +162,9 @@ Most shared contracts are derived from the pinned `MrDoe/starlimsvscode` source.
 | `execute_server_script` | `uri`, `parameters?`, `outputType?`, `entryPoint?`, `maxCharacters?` | `execute` | `scripts.execute` | — | 执行 Server Script 并返回受限输出。Execute a Server Script and return bounded output. |
 | `execute_data_source` | `uri`, `parameters?`, `outputType?`, `maxRows?`, `maxCharacters?` | `execute` | `datasource.execute` | — | 执行 Data Source 并限制返回行数/字符数。Execute a Data Source with row and character limits. |
 
-`—` 表示当前通用契约存在，但 v0.4.0 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
+`—` 表示当前通用契约存在，但 v0.5.0 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
 
-`—` means the unified contract exists but the v0.4.0 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
+`—` means the unified contract exists but the v0.5.0 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
 
 推荐远端编辑顺序 / Recommended remote-edit sequence:
 
@@ -180,11 +177,11 @@ search_by_name or browse_tree
   → checkin_item only when the user explicitly requests it
 ```
 
-### DevTools 专属工具 / DevTools-specific tools
+### 当前由 DevTools Adapter 提供的自有工具 / MCP-owned tools currently provided by the DevTools Adapter
 
-这些工具来自 `tenlyc/starlims-devtools`，只属于 `unified` 和 `devtools` Profile，并由 DevTools 当前登录会话实现。
+这些工具归属 `tenlyc/starlims-mcp`，当前只属于 `unified` 和 `devtools` Profile，并由 DevTools 当前登录会话实现。以后其他宿主实现相同 Capability 时可以直接复用契约。
 
-These tools originate in `tenlyc/starlims-devtools`, belong only to the `unified` and `devtools` profiles, and are implemented through the active DevTools session.
+These tools are owned by `tenlyc/starlims-mcp`, currently belong only to the `unified` and `devtools` profiles, and are implemented through the active DevTools session. Other hosts may reuse the same contracts after implementing the capabilities.
 
 | 工具 / Tool | 参数 / Parameters | 风险 / Risk | Capability | 说明 / Description |
 | --- | --- | --- | --- | --- |
@@ -241,17 +238,19 @@ The shared contract provides three tools that always carry an explicit `language
 
 These tools use the `/HTMLForms/Resources/...` URI returned by browse or checkout operations. Writes remain subject to host approvals and content-version gates.
 
-## SCM 命名空间 / SCM namespaces
+## 单一 SCM_API 部署包 / Single SCM_API deployment package
 
 | Namespace | 中文策略 | English policy |
 | --- | --- | --- |
-| `SCM_API.*` | 来源于 `MrDoe/starlimsvscode`；固定提交并原样保存 | Sourced from `MrDoe/starlimsvscode`; commit-pinned and preserved unchanged |
-| `STARLIMS_MCP_API.*` | 多个 MCP 宿主共享的新后端扩展 | New backend extensions shared by multiple MCP hosts |
-| `STARLIMS_DEVTOOLS_API.*` | DevTools UI、工作区或质量门禁专属扩展 | Extensions specific to DevTools UI, workspace, or quality gates |
+| `SCM_API.*` | 唯一部署命名空间：保留固定上游基础脚本，自有扩展使用 `Mcp*` 前缀 | The only deployment namespace: preserves the pinned upstream base while owned extensions use an `Mcp*` prefix |
 
-不要在 Vendor 快照中直接修改代码。共享修改进入 `src/` 或 `scm/extensions/STARLIMS_MCP_API`，产品修改留在对应产品仓库。
+来源归属仍独立记录：普通上游脚本归属 `starlimsvscode`，`McpGetSCMUsers`、`McpGetCheckInHistory`、`McpExportPackage`、`McpImportPackage` 等自有脚本归属 `starlims-mcp`。DevTools 构建时把两者合并为一个 `SCM_API.sdp`，不再提供第二个产品专属 SDP。
 
-Do not edit Vendor snapshots directly. Shared changes belong in `src/` or `scm/extensions/STARLIMS_MCP_API`; product changes remain in the relevant product repository.
+Provenance remains separate: regular upstream scripts belong to `starlimsvscode`, while owned scripts such as `McpGetSCMUsers`, `McpGetCheckInHistory`, `McpExportPackage`, and `McpImportPackage` belong to `starlims-mcp`. DevTools merges both into one `SCM_API.sdp` at build time and no longer ships a second product-specific SDP.
+
+不要在 Vendor 快照中直接修改代码。自有 MCP 契约进入 `src/`，自有后端扩展的清单和策略进入 `scm/extensions/SCM_API`；宿主 UI 和 Adapter 留在对应产品仓库。
+
+Do not edit Vendor snapshots directly. Owned MCP contracts belong in `src/`, owned backend-extension manifests and policy belong in `scm/extensions/SCM_API`, and host UI/Adapter code remains in the relevant product repository.
 
 ## Vendor 快照 / Vendor snapshots
 
@@ -360,7 +359,7 @@ Binding to a non-loopback address requires `STARLIMS_MCP_AUTH_TOKEN` with at lea
 import { createStarlimsMcpServer } from '@tenlyc/starlims-mcp';
 
 const server = createStarlimsMcpServer({
-  version: '0.4.0',
+  version: '0.5.0',
   profile: 'devtools',
   adapter: {
     id: 'my-starlims-host',
@@ -381,6 +380,23 @@ npm install
 npm run check
 npm pack --dry-run
 ```
+
+生成供 STARLIMS DevTools 运行时更新使用的独立 Server 发布资产：
+
+Build the standalone Server release assets used by STARLIMS DevTools runtime updates:
+
+```bash
+npm run build:devtools-server
+```
+
+该命令生成 `release-assets/starlims-mcp-devtools-server.cjs` 及对应 SHA-256 文件。推送
+版本标签后，Release 工作流会发布这两个文件。STARLIMS DevTools 只有在资产齐全且摘要
+校验一致时才安装更新；否则继续使用随程序提供的版本和内置回退服务。
+
+The command creates `release-assets/starlims-mcp-devtools-server.cjs` and its SHA-256 file.
+The tag release workflow publishes both assets. STARLIMS DevTools installs an update only when
+both are present and the digest matches; otherwise it retains the bundled version and embedded
+fallback.
 
 `npm run check` 会构建 ESM/CommonJS、执行契约测试，并离线校验全部 Vendor 快照。
 

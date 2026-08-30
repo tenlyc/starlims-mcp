@@ -1,5 +1,6 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "description": "Tool ownership is independent from host availability. Only starlimsvscode and starlims-mcp are capability owners; profile files define where a tool can run.",
   "provenance": {
     "starlimsvscode": {
       "repository": "https://github.com/MrDoe/starlimsvscode",
@@ -11,47 +12,40 @@
       "repository": "https://github.com/tenlyc/starlims-mcp",
       "license": "MIT",
       "relationship": "original"
-    },
-    "starlims-devtools": {
-      "repository": "https://github.com/tenlyc/starlims-devtools",
-      "license": "MIT",
-      "relationship": "original"
     }
   },
-  "shared": [
-    "browse_tree",
-    "search_by_name",
-    "global_code_search",
-    "list_languages",
-    "get_item_code",
-    "read_log",
-    "get_table_definition",
-    "checkout_item",
-    "save_item",
-    "checkin_item",
-    "undo_checkout",
-    "execute_server_script",
-    "execute_data_source"
-  ],
-  "starlims-devtools": [
-    "list_checked_out_items",
-    "query_checkin_history"
-  ],
-  "starlimsvscode": [
-    "refresh_checkout_tree",
-    "vscode_save_local_item",
-    "create_item",
-    "checkout_table",
-    "checkin_table",
-    "create_table",
-    "edit_table",
-    "run_integration_tests",
-    "transfer_item_to_server"
-  ],
-  "starlims-mcp": [
-    "get_capabilities",
-    "get_form_resources",
-    "save_form_resources",
-    "set_form_resource"
-  ]
+  "ownership": {
+    "starlimsvscode": [
+      "browse_tree",
+      "search_by_name",
+      "global_code_search",
+      "list_languages",
+      "get_item_code",
+      "read_log",
+      "get_table_definition",
+      "checkout_item",
+      "save_item",
+      "checkin_item",
+      "undo_checkout",
+      "execute_server_script",
+      "execute_data_source",
+      "refresh_checkout_tree",
+      "vscode_save_local_item",
+      "create_item",
+      "checkout_table",
+      "checkin_table",
+      "create_table",
+      "edit_table",
+      "run_integration_tests",
+      "transfer_item_to_server"
+    ],
+    "starlims-mcp": [
+      "get_capabilities",
+      "get_form_resources",
+      "save_form_resources",
+      "set_form_resource",
+      "list_checked_out_items",
+      "query_checkin_history"
+    ]
+  }
 }
