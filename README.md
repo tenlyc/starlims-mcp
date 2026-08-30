@@ -148,7 +148,7 @@ The importer requires a clean source repository whose `HEAD` exactly matches the
 import { createStarlimsMcpServer } from '@tenlyc/starlims-mcp';
 
 const server = createStarlimsMcpServer({
-  version: '0.2.0',
+  version: '0.3.1',
   profile: 'devtools',
   adapter: {
     id: 'my-starlims-host',

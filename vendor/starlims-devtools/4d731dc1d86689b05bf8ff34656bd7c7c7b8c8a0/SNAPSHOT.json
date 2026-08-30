@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "starlims-devtools",
+  "sourceRepository": "tenlyc/starlims-devtools",
+  "sourceUrl": "https://github.com/tenlyc/starlims-devtools",
+  "sourceCommit": "4d731dc1d86689b05bf8ff34656bd7c7c7b8c8a0",
+  "license": "MIT",
+  "capturedAt": "2026-08-30T02:33:27.141Z",
+  "immutable": true,
+  "includedPaths": [
+    "LICENSE",
+    "package.json",
+    "components/shared-components.lock.json",
+    "docs/MCP_ARCHITECTURE.md",
+    "electron/mcpServer.ts",
+    "electron/externalMcpManager.ts",
+    "electron/genericAgentRuntime.ts",
+    "src/components/MCP",
+    "src/services/agentPermissions.ts",
+    "src/services/enterpriseService.ts",
+    "src/services/formResources.ts",
+    "src/services/mcpApprovalStore.ts",
+    "src/services/writeGateService.ts",
+    "src/scm_api",
+    "scripts/mcp-smoke-test.ts",
+    "scripts/form-resources-mcp-smoke-test.ts",
+    "scripts/generic-agent-tools-smoke-test.ts",
+    "scripts/shared-mcp-component-smoke-test.ts"
+  ],
+  "fileCount": 256,
+  "totalBytes": 1233312,
+  "filesManifestSha256": "4b6a2bee0d2e8b1d1b19711455dd5d9b542f205afd9cae073afdd1eec225465f",
+  "notes": [
+    "This is an implementation snapshot, not a runtime dependency.",
+    "The complete DevTools SCM tree is retained because it contains the upstream-compatible SCM_API overlay and STARLIMS_DEVTOOLS_API extensions."
+  ]
+}

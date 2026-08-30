@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "components": {
+    "starlims-mcp": {
+      "repository": "tenlyc/starlims-mcp",
+      "package": "@tenlyc/starlims-mcp",
+      "version": "0.3.0",
+      "tag": "v0.3.0",
+      "commit": "da15e7d32e811f8abd19f2135c66098610965751",
+      "role": "shared MCP contracts and host-neutral runtime"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@tenlyc/starlims-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Shared STARLIMS MCP contracts and host-neutral server runtime",
   "type": "module",
   "main": "cjs/index.js",

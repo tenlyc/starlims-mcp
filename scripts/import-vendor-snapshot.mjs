@@ -34,10 +34,13 @@ const profiles = {
       'electron/genericAgentRuntime.ts',
       'src/components/MCP',
       'src/services/agentPermissions.ts',
+      'src/services/enterpriseService.ts',
+      'src/services/formResources.ts',
       'src/services/mcpApprovalStore.ts',
       'src/services/writeGateService.ts',
       'src/scm_api',
       'scripts/mcp-smoke-test.ts',
+      'scripts/form-resources-mcp-smoke-test.ts',
       'scripts/generic-agent-tools-smoke-test.ts',
       'scripts/shared-mcp-component-smoke-test.ts'
     ],
