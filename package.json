@@ -1,25 +1,27 @@
 {
   "name": "@tenlyc/starlims-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared STARLIMS MCP contracts and host-neutral server runtime",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "cjs/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./cjs/index.js"
     }
   },
   "files": [
     "dist",
+    "cjs",
     "scm",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json",
     "prepare": "npm run build",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "check": "npm run test"

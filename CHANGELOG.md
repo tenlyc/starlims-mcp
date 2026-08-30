@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.1] - 2026-08-30
+
+- 同时发布 ESM 与 CommonJS 运行时入口，兼容 Electron、VS Code 和独立 Node 宿主。
+
 ## [0.1.0] - 2026-08-30
 
 - 建立统一 STARLIMS MCP 工具目录和来源标记。
