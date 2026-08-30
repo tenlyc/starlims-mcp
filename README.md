@@ -162,9 +162,9 @@ Most shared contracts are derived from the pinned `MrDoe/starlimsvscode` source.
 | `execute_server_script` | `uri`, `parameters?`, `outputType?`, `entryPoint?`, `maxCharacters?` | `execute` | `scripts.execute` | — | 执行 Server Script 并返回受限输出。Execute a Server Script and return bounded output. |
 | `execute_data_source` | `uri`, `parameters?`, `outputType?`, `maxRows?`, `maxCharacters?` | `execute` | `datasource.execute` | — | 执行 Data Source 并限制返回行数/字符数。Execute a Data Source with row and character limits. |
 
-`—` 表示当前通用契约存在，但 v0.5.0 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
+`—` 表示当前通用契约存在，但 v0.5.1 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
 
-`—` means the unified contract exists but the v0.5.0 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
+`—` means the unified contract exists but the v0.5.1 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
 
 推荐远端编辑顺序 / Recommended remote-edit sequence:
 
@@ -359,7 +359,7 @@ Binding to a non-loopback address requires `STARLIMS_MCP_AUTH_TOKEN` with at lea
 import { createStarlimsMcpServer } from '@tenlyc/starlims-mcp';
 
 const server = createStarlimsMcpServer({
-  version: '0.5.0',
+  version: '0.5.1',
   profile: 'devtools',
   adapter: {
     id: 'my-starlims-host',
@@ -398,9 +398,28 @@ The tag release workflow publishes both assets. STARLIMS DevTools installs an up
 both are present and the digest matches; otherwise it retains the bundled version and embedded
 fallback.
 
+### DevTools 宿主联机验收 / Live DevTools host verification
+
+STARLIMS DevTools v1.6.2 已使用本组件 v0.5.x 完成验收，并在应用启动、登录后提供只读联机验收命令：
+
+STARLIMS DevTools v1.6.2 has been validated against this component's v0.5.x line and provides a read-only live acceptance command after the application is running and signed in:
+
+```bash
+# 在 starlims-devtools 仓库中执行 / run in the starlims-devtools repository
+npm run test:mcp-live
+```
+
+该测试通过真实 `starlims-devtools-bridge` Adapter 验证 MCP 握手、`get_capabilities`、19 个当前可用工具、两个来源以及单一 `SCM_API` 后端，并实际读取企业树、检出项和签入历史。输出只包含数量，不打印 STARLIMS 名称、代码、地址或账号。
+
+The test uses the real `starlims-devtools-bridge` Adapter to verify the MCP handshake, `get_capabilities`, the 19 currently exposed tools, both provenance origins, and the single `SCM_API` backend. It also reads the enterprise tree, checked-out items, and check-in history. Output contains counts only and does not print STARLIMS names, code, addresses, or accounts.
+
 `npm run check` 会构建 ESM/CommonJS、执行契约测试，并离线校验全部 Vendor 快照。
 
 `npm run check` builds ESM/CommonJS outputs, runs contract tests, and verifies every Vendor snapshot offline.
+
+Vendor 文本摘要会先将 CRLF 规范化为 LF，二进制文件保持原始字节，因此同一快照可在 macOS、Windows 和 Linux CI 中得到一致结果。只有重新审查或导入快照时才应运行 `npm run vendor:refresh`。
+
+Vendor text digests canonicalize CRLF to LF while binary files retain their original bytes, producing identical snapshot verification on macOS, Windows, and Linux CI. Run `npm run vendor:refresh` only when a snapshot has been re-reviewed or imported.
 
 ## 来源与许可 / Provenance and license
 

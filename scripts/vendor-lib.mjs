@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 
 export const normalizePath = (value) => value.split('\\').join('/');
@@ -19,8 +19,18 @@ export async function listFiles(root) {
   return files;
 }
 
+function canonicalFileContent(content) {
+  if (content.includes(0)) return content;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(content);
+    return Buffer.from(text.replace(/\r\n/g, '\n'), 'utf8');
+  } catch {
+    return content;
+  }
+}
+
 export async function sha256(path) {
-  return createHash('sha256').update(await readFile(path)).digest('hex');
+  return createHash('sha256').update(canonicalFileContent(await readFile(path))).digest('hex');
 }
 
 export async function buildFileManifest(snapshotRoot) {
@@ -30,8 +40,9 @@ export async function buildFileManifest(snapshotRoot) {
   let bytes = 0;
   for (const file of files) {
     const path = normalizePath(relative(snapshotRoot, file));
-    lines.push(`${await sha256(file)}  ${path}`);
-    bytes += (await stat(file)).size;
+    const content = canonicalFileContent(await readFile(file));
+    lines.push(`${createHash('sha256').update(content).digest('hex')}  ${path}`);
+    bytes += content.byteLength;
   }
   const content = `${lines.join('\n')}\n`;
   return {

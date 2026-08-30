@@ -17,8 +17,8 @@
     "src/extension.ts"
   ],
   "fileCount": 254,
-  "totalBytes": 1565934,
-  "filesManifestSha256": "9ffab37ee9208c6460384c75f7006dc0cf5c83522bc44f8b6a70f08e469701c0",
+  "totalBytes": 1558952,
+  "filesManifestSha256": "6a6459a7eb460eae186ca6b061db9392b2c40f56d20083acfe71602cda26bc21",
   "notes": [
     "The upstream package.json is intentionally not mirrored because the reviewed commit contains an abnormally large, corrupted metadata blob.",
     "The snapshot preserves the MCP implementation, its local service/provider dependencies, tests, and the complete SCM_API source and SDP artifact."

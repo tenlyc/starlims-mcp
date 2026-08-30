@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-30T02:33:27.263Z",
+  "generatedAt": "2026-08-30T09:49:18.833Z",
   "snapshots": [
     {
       "id": "starlims-devtools",
@@ -29,8 +29,8 @@
       "path": "starlimsvscode/92b9014244eb09a56ed589db5155c3b7914b70a2",
       "license": "MIT",
       "fileCount": 254,
-      "totalBytes": 1565934,
-      "filesManifestSha256": "9ffab37ee9208c6460384c75f7006dc0cf5c83522bc44f8b6a70f08e469701c0"
+      "totalBytes": 1558952,
+      "filesManifestSha256": "6a6459a7eb460eae186ca6b061db9392b2c40f56d20083acfe71602cda26bc21"
     }
   ]
 }
