@@ -113,7 +113,7 @@ DevTools Adapter 目前对外提供 37 个工具，包括菜单、预览、执�
 
 The shared devtools profile defines all 37 tools exposed through the DevTools Adapter. Menu, preview, execution and table-editing capabilities depend on the DevTools adapter and session; they are not all implemented by the standalone HTTP adapter. Use get_capabilities and tools/list for the active connection.
 
-验证：22 项测试、自动生成的接口文档和 3 个不可变 vendor 快照校验；共享 Server 的集成测试直接检查全部 37 个 DevTools 接口和截图响应。DevTools 实际材料类型中文页面、CRUD、菜单与系统打印验收属于宿主集成验证，不等于独立 HTTP Adapter 的全功能运行验收。
+验证：23 项测试、自动生成的接口文档和 3 个不可变 vendor 快照校验；共享 Server 的集成测试直接检查全部 37 个 DevTools 接口和截图响应。DevTools 实际材料类型中文页面、CRUD、菜单与系统打印验收属于宿主集成验证，不等于独立 HTTP Adapter 的全功能运行验收。
 
 当前统一目录包含 **40 个业务工具**，Server 另外注册能力发现工具 `get_capabilities`。DevTools Profile 提供 **37 个工具**，其中所有接口均由本仓库统一定义和注册；完整可用目录见 [自动生成接口清单](docs/TOOLS.md)。实际客户端看到的数量由 `Profile ∩ Adapter capabilities ∩ permission policy` 决定，并不表示缺失的工具发生了故障。
 
@@ -452,3 +452,5 @@ This repository's own code is licensed under the [MIT License](LICENSE).
 For HTML Forms, resource writes also verify and repair the standard `Resources` loading binding in Form XML, using the GUID resolved from the exact enterprise URI and the explicit language. Existing layered fallback remains intact; custom data sources require manual review. `formBindingVerified` and `formBindingUpdated` report this separately from runtime synchronization. Resources and Form XML use two version-checked saves, not a transaction; re-read both after any partial failure. No automatic check-in is performed.
 
 Resources tools return `formDiagnostics` (binding status, enterprise/XML GUID mismatch, and column definitions missing `xtype`) and `runtimeVerified: false`. These are read-only structural checks, not runtime acceptance. `get_form_resources` additionally returns the resource data `format`. A Form's `<Resources><Data>...</Data></Resources>` is a loading binding, not designer-paste resource data; supplying it to `save_form_resources` is rejected rather than interpreted as zero rows. Resource rows missing their value element are also rejected; explicit empty values remain supported. Build new Form XML from a Designer-generated template for the same control types, preserving typed column metadata.
+
+Browser renderers import schemas/workflows from `@tenlyc/starlims-mcp/browser`; the root entry includes Node server modules and belongs in the host process. The browser entry is tested with a browser-target bundle.
