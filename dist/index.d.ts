@@ -7,4 +7,7 @@ export * from './logger.js';
 export * from './form-resources.js';
 export * from './adapters/starlims-http-adapter.js';
 export * from './transports.js';
+export * from './menu-schema.js';
+export * from './workflow-instructions.js';
+export * from './instructions.js';
 //# sourceMappingURL=index.d.ts.map

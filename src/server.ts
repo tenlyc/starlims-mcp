@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
+import { STARLIMS_MCP_INSTRUCTIONS } from './instructions.js';
 import { buildCapabilityDocument } from './capabilities.js';
 import { getProfileTools } from './catalog.js';
 import type { StarlimsMcpAdapter, StarlimsMcpProfile, StarlimsToolRisk } from './types.js';
@@ -16,7 +17,7 @@ export interface CreateStarlimsMcpServerOptions {
 const annotationsFor = (risk: StarlimsToolRisk) => ({
   readOnlyHint: risk === 'read',
   destructiveHint: risk === 'destructive',
-  idempotentHint: risk === 'read' || risk === 'write',
+  idempotentHint: risk === 'read',
   openWorldHint: risk === 'execute'
 });
 
@@ -32,7 +33,7 @@ export function createStarlimsMcpServer(options: CreateStarlimsMcpServerOptions)
     { name: serverName, version: options.version },
     {
       capabilities: { logging: {}, tools: {} },
-      instructions: options.instructions || 'Use STARLIMS as the authoritative remote source. Browse or search before reading. Check out before saving. Obtain user approval for write, destructive, and execution operations.'
+      instructions: options.instructions || STARLIMS_MCP_INSTRUCTIONS
     }
   );
 
@@ -63,6 +64,11 @@ export function createStarlimsMcpServer(options: CreateStarlimsMcpServerOptions)
         const arguments_ = (rawArguments || {}) as Record<string, unknown>;
         try {
           const value = await options.adapter.invoke(tool.adapterTool || tool.id, arguments_);
+          if (tool.id === 'capture_form_screenshot' && value && typeof value === 'object' && 'imageData' in value && typeof value.imageData === 'string') {
+            const { imageData, mimeType, ...metadata } = value as Record<string, unknown>;
+            const result = structuredResult(metadata);
+            return { content: [{ type: 'image' as const, data: String(imageData), mimeType: String(mimeType || 'image/png') }, { type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result };
+          }
           const result = structuredResult(value);
           return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], structuredContent: result };
         } catch (error) {

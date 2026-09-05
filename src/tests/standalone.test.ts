@@ -10,12 +10,37 @@ import { loadStarlimsMcpConfig } from '../config.js';
 import { contentVersion, parseFormResources, setFormResourceValue, toProgrammaticFormResources } from '../form-resources.js';
 import { redactLogValue, type StarlimsLogger } from '../logger.js';
 import { createStarlimsMcpServer } from '../server.js';
+import { getProfileTools } from '../catalog.js';
 import { startHttpTransport } from '../transports.js';
 import { ensureFormResourceBinding, inspectFormResourceBinding } from '../form-resource-binding.js';
 
 const logger: StarlimsLogger = { debug: () => undefined, info: () => undefined, error: () => undefined };
 const resourcesUri = '/Applications/Equipment/EQUIPMENT_MANAGER/HTMLForms/Resources/Equipment_Ledger';
 const codeUri = '/ServerScripts/TOOLS/Hello';
+
+test('shared server alone registers all 37 DevTools tools and preserves screenshot results', async context => {
+  const contracts = getProfileTools('devtools');
+  const calls: string[] = [];
+  const server = await startHttpTransport({ host: '127.0.0.1', port: 0, logger,
+    createServer: () => createStarlimsMcpServer({ version: '0.5.2', profile: 'devtools', adapter: {
+      id: 'host-adapter', capabilities: [...new Set(contracts.map(tool => tool.capability))],
+      invoke: async tool => { calls.push(tool); return tool === 'capture_form_screenshot' ? { imageData: 'aGVsbG8=', mimeType: 'image/png', path: '/tmp/test.png' } : { invoked: tool }; }
+    } }) });
+  context.after(() => server.close());
+  const client = new Client({ name: 'catalog-integration-test', version: '1' });
+  context.after(() => client.close());
+  await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+  const listed = (await client.listTools()).tools.map(tool => tool.name);
+  assert.equal(listed.length, 37); assert.equal(new Set(listed).size, 37);
+  assert.deepEqual(new Set(listed), new Set(['get_capabilities', ...contracts.map(tool => tool.id)]));
+  const capability = (await client.callTool({name:'get_capabilities', arguments:{}})).structuredContent as { tools: {id: string}[] };
+  assert.deepEqual(new Set(capability.tools.map(tool => tool.id)), new Set(contracts.map(tool => tool.id)));
+  const screenshot = await client.callTool({ name: 'capture_form_screenshot', arguments: {} });
+  assert.equal((screenshot.content as {type: string}[])[0].type, 'image');
+  assert.equal('imageData' in (screenshot.structuredContent as Record<string, unknown>), false);
+  await client.callTool({name:'get_menu_configuration', arguments:{group:'Demo'}});
+  assert.deepEqual(calls, ['capture_form_screenshot', 'get_menu_configuration']);
+});
 const initialResources = '<?xml version="1.0"?><NewDataSet><ResourcesTable><Guid>g-1</Guid><ResourceId>TITLE</ResourceId><ResourceValue>Equipment</ResourceValue></ResourcesTable></NewDataSet>';
 const formUri = resourcesUri.replace('/Resources/', '/XML/');
 const formGuid = '11111111-2222-4333-8444-555555555555';

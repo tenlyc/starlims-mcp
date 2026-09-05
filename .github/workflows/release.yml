@@ -21,8 +21,14 @@ jobs:
         run: node -e "const p=require('./package.json'); if ('v'+p.version !== process.env.GITHUB_REF_NAME) throw new Error('Tag and package version differ')"
       - run: npm run check
       - run: npm run build:devtools-server
+      - name: Verify bundled server package
+        working-directory: scm/distribution
+        run: sha256sum --check SCM_API.sdp.sha256
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             release-assets/starlims-mcp-devtools-server.cjs
             release-assets/starlims-mcp-devtools-server.cjs.sha256
+            scm/distribution/SCM_API.sdp
+            scm/distribution/SCM_API.sdp.sha256
+            scm/distribution/manifest.json

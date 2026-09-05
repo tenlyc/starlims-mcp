@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "SCM_API.sdp",
+  "sha256": "7d702570756a974136ec0247a87b39e98741c79ec9b88da14ddf5954803e8b6d",
+  "sourceRepository": "https://github.com/tenlyc/starlims-devtools",
+  "sourceCommit": "f6fb2b2d2333f5615b64d42a8ef68c9dc9d35806",
+  "sourcePath": "src/scm_api/SCM_API.sdp",
+  "mcpVersion": "0.5.2",
+  "notes": "Complete deployment rebuilt from scm/server, imported from the recorded DevTools commit. Does not implement missing host-side adapters.",
+  "maintainedSource": "scm/server"
+}

@@ -53,6 +53,12 @@ In embedded mode the host owns credentials, server selection, approval UX, and A
 
 ## Profile 与工具来源 / Profiles and tool provenance
 
+### 给其他应用单独使用时 / Standalone use from another application
+
+其他 AI 应用连接独立 starlims-mcp 时，不需要启动 DevTools 桌面程序，但 STARLIMS 服务器必须部署兼容的 SCM_API 接口。当前完整配套部署包由本仓库 Releases 和 npm 包内 `scm/distribution/SCM_API.sdp` 交付，校验值及来源记录一起提供。`scm/server` 是当前维护源码，`scm/extensions` 是历史扩展布局。已经在同一 STARLIMS 环境部署兼容版本时，不要重复导入；升级时按服务器变更流程部署匹配版本。接口包不包含 DevTools 的桌面预览、菜单 Adapter 或登录会话。
+
+Other applications can use standalone starlims-mcp without running the DevTools desktop app. The STARLIMS server still needs a compatible SCM_API deployment. The complete `SCM_API.sdp`, checksum and provenance manifest are delivered by this repository's releases and npm package under scm/distribution. Maintained server sources live in scm/server. Reuse an existing compatible server deployment. Installing the server package does not add desktop-only adapter capabilities to standalone mode.
+
 | Profile | 中文 | English |
 | --- | --- | --- |
 | `unified` | 面向新客户端的统一契约，按 Adapter 能力生成工具并集 | Unified contract for new clients, filtered by Adapter capabilities |
@@ -103,15 +109,15 @@ Call `get_capabilities` after connecting to inspect active tools, provenance, ri
 
 This version includes resource format/binding fixes, verified family check-in, and preservation of an existing form checkout. XML, CodeBehind, Resources and Guide share one checkout. Do not re-checkout each child after editing.
 
-DevTools 的宿主扩展目前对外提供 37 个工具，包括菜单、预览、执行和表编辑。这些由 DevTools Adapter 和登录会话实现，独立 HTTP Adapter 不会自动获得全部 37 个。尤其菜单的 get_menu_configuration / plan_menu_item / apply_menu_item 目前是 DevTools 扩展。请用 get_capabilities 和 tools/list 核实当前连接。
+DevTools Adapter 目前对外提供 37 个工具，包括菜单、预览、执行和表编辑。这 37 个接口的定义和协议注册现在全部属于本仓库；DevTools 只提供执行 Adapter 和登录会话，不再添加接口。独立 HTTP Adapter 尚未实现全部宿主执行能力。请用 get_capabilities 和 tools/list 核实当前连接。
 
-DevTools exposes 37 tools through its host extensions. Menu, preview, execution and table-editing capabilities depend on the DevTools adapter and session; they are not all implemented by the standalone HTTP adapter. Use get_capabilities and tools/list for the active connection.
+The shared devtools profile defines all 37 tools exposed through the DevTools Adapter. Menu, preview, execution and table-editing capabilities depend on the DevTools adapter and session; they are not all implemented by the standalone HTTP adapter. Use get_capabilities and tools/list for the active connection.
 
-验证：21 项测试和 3 个不可变 vendor 快照校验通过。DevTools 实际材料类型中文页面、CRUD、菜单与系统打印验收属于宿主集成验证，不等于独立 HTTP Adapter 的全功能运行验收。
+验证：22 项测试、自动生成的接口文档和 3 个不可变 vendor 快照校验；共享 Server 的集成测试直接检查全部 37 个 DevTools 接口和截图响应。DevTools 实际材料类型中文页面、CRUD、菜单与系统打印验收属于宿主集成验证，不等于独立 HTTP Adapter 的全功能运行验收。
 
-当前统一目录包含 **27 个业务工具**，Server 另外注册 1 个能力发现工具 `get_capabilities`，因此完整契约最多为 **28 个工具**。实际客户端看到的数量由 `Profile ∩ Adapter capabilities ∩ permission policy` 决定，并不表示缺失的工具发生了故障。
+当前统一目录包含 **40 个业务工具**，Server 另外注册能力发现工具 `get_capabilities`。DevTools Profile 提供 **37 个工具**，其中所有接口均由本仓库统一定义和注册；完整可用目录见 [自动生成接口清单](docs/TOOLS.md)。实际客户端看到的数量由 `Profile ∩ Adapter capabilities ∩ permission policy` 决定，并不表示缺失的工具发生了故障。
 
-The unified catalog currently contains **27 business tools**. The server registers one additional discovery tool, `get_capabilities`, for a maximum contract of **28 tools**. The actual list visible to a client is the intersection of the selected profile, Adapter capabilities, and permission policy; an omitted tool is not necessarily a server failure.
+The shared catalog contains **40 business tools** plus discovery. The DevTools profile exposes **37 tools**, all defined and registered here. See the [generated reference](docs/TOOLS.md). The actual list visible to a client is the intersection of the selected profile, Adapter capabilities, and permission policy; an omitted tool is not necessarily a server failure.
 
 常见数量 / Common counts:
 
@@ -119,8 +125,8 @@ The unified catalog currently contains **27 business tools**. The server registe
 | --- | ---: | --- |
 | 独立 HTTP Adapter，`read-only` | 8 | 7 个读取工具 + `get_capabilities` / 7 read tools plus discovery |
 | 独立 HTTP Adapter，`allow-writes` | 13 | 再增加签出、保存、Resources 写入和签入 / adds checkout, save, Resources writes, and check-in |
-| STARLIMS DevTools Adapter | 19 | 18 个 DevTools Profile 工具 + `get_capabilities` / 18 profile tools plus discovery |
-| 完整 `unified` Profile | 最多 27 | 26 个业务工具 + `get_capabilities`，仍受 Adapter 过滤 / 26 business tools plus discovery, still Adapter-filtered |
+| STARLIMS DevTools Adapter | 37 | 36 个共享 Profile 工具 + `get_capabilities` / 36 shared profile tools plus discovery |
+| 完整 `unified` Profile | 最多 40 | 39 个业务工具 + `get_capabilities`，仍受 Adapter 过滤 / 39 business tools plus discovery |
 | 完整 `vscode-compat` Profile | 最多 26 | 25 个业务工具 + `get_capabilities` / 25 business tools plus discovery |
 
 参数约定 / Parameter conventions:
@@ -226,9 +232,9 @@ These tools originate from or preserve compatibility with `MrDoe/starlimsvscode`
 - 工具失败返回 MCP `isError: true` 和可读错误信息，不应被客户端当作成功结果继续执行。
 
   Tool failures return MCP `isError: true` with a readable message and must not be treated as successful output.
-- `get_capabilities` 是 Server 元工具，不属于 `STARLIMS_TOOL_CATALOG` 的 27 个业务契约，因此目录测试或 Profile 统计需要单独加 1。
+- `get_capabilities` 是 Server 元工具，不属于 `STARLIMS_TOOL_CATALOG` 的 40 个业务契约，因此目录测试或 Profile 统计需要单独加 1。
 
-  `get_capabilities` is a server-level meta tool rather than one of the 27 business contracts in `STARLIMS_TOOL_CATALOG`, so catalog/profile counts must add it separately.
+  `get_capabilities` is a server-level meta tool rather than one of the 40 business contracts in `STARLIMS_TOOL_CATALOG`, so catalog/profile counts must add it separately.
 
 ### 多语言表单资源 / Multilingual form resources
 
@@ -254,15 +260,15 @@ These tools use the `/HTMLForms/Resources/...` URI returned by browse or checkou
 
 | Namespace | 中文策略 | English policy |
 | --- | --- | --- |
-| `SCM_API.*` | 唯一部署命名空间：保留固定上游基础脚本，自有扩展使用 `Mcp*` 前缀 | The only deployment namespace: preserves the pinned upstream base while owned extensions use an `Mcp*` prefix |
+| `SCM_API.*` | 唯一部署命名空间：保留固定上游基础脚本，自有扩展通常使用 `Mcp*` 前缀，菜单使用 `MenuManagement` | The only deployment namespace: preserves the pinned upstream base while owned extensions normally use an `Mcp*` prefix; menus use `MenuManagement` |
 
-来源归属仍独立记录：普通上游脚本归属 `starlimsvscode`，`McpGetSCMUsers`、`McpGetCheckInHistory`、`McpExportPackage`、`McpImportPackage` 等自有脚本归属 `starlims-mcp`。DevTools 构建时把两者合并为一个 `SCM_API.sdp`，不再提供第二个产品专属 SDP。
+来源归属仍独立记录：普通上游脚本归属 `starlimsvscode`，`McpGetSCMUsers`、`McpGetCheckInHistory`、`McpExportPackage`、`McpImportPackage` 等自有脚本归属 `starlims-mcp`。本仓库从 `scm/server` 构建统一的 `SCM_API.sdp`，DevTools 构建时校验并复制同一发布包，不再提供第二个产品专属 SDP。
 
-Provenance remains separate: regular upstream scripts belong to `starlimsvscode`, while owned scripts such as `McpGetSCMUsers`, `McpGetCheckInHistory`, `McpExportPackage`, and `McpImportPackage` belong to `starlims-mcp`. DevTools merges both into one `SCM_API.sdp` at build time and no longer ships a second product-specific SDP.
+Provenance remains separate: regular upstream scripts belong to `starlimsvscode`, while owned scripts such as `McpGetSCMUsers`, `McpGetCheckInHistory`, `McpExportPackage`, and `McpImportPackage` belong to `starlims-mcp`. This repository builds one `SCM_API.sdp` from `scm/server`; DevTools verifies and copies that same distribution and no longer ships a second product-specific SDP.
 
-不要在 Vendor 快照中直接修改代码。自有 MCP 契约进入 `src/`，自有后端扩展的清单和策略进入 `scm/extensions/SCM_API`；宿主 UI 和 Adapter 留在对应产品仓库。
+不要在 Vendor 快照中直接修改代码。自有 MCP 契约进入 `src/`，当前后端源码进入 `scm/server`，`scm/extensions/SCM_API` 保留历史来源策略；宿主 UI 和 Adapter 留在对应产品仓库。
 
-Do not edit Vendor snapshots directly. Owned MCP contracts belong in `src/`, owned backend-extension manifests and policy belong in `scm/extensions/SCM_API`, and host UI/Adapter code remains in the relevant product repository.
+Do not edit Vendor snapshots directly. Owned MCP contracts belong in `src/`, maintained backend sources belong in `scm/server` (`scm/extensions/SCM_API` retains historical provenance policy), and host UI/Adapter code remains in the relevant product repository.
 
 ## Vendor 快照 / Vendor snapshots
 
@@ -421,9 +427,9 @@ STARLIMS DevTools v1.6.2 has been validated against this component's v0.5.x line
 npm run test:mcp-live
 ```
 
-该测试通过真实 `starlims-devtools-bridge` Adapter 验证 MCP 握手、`get_capabilities`、19 个当前可用工具、两个来源以及单一 `SCM_API` 后端，并实际读取企业树、检出项和签入历史。输出只包含数量，不打印 STARLIMS 名称、代码、地址或账号。
+该测试通过真实 `starlims-devtools-bridge` Adapter 验证 MCP 握手、`get_capabilities`、当时的 19 个工具（当前 devtools Profile 为 37 个）、两个来源以及单一 `SCM_API` 后端，并实际读取企业树、检出项和签入历史。输出只包含数量，不打印 STARLIMS 名称、代码、地址或账号。
 
-The test uses the real `starlims-devtools-bridge` Adapter to verify the MCP handshake, `get_capabilities`, the 19 currently exposed tools, both provenance origins, and the single `SCM_API` backend. It also reads the enterprise tree, checked-out items, and check-in history. Output contains counts only and does not print STARLIMS names, code, addresses, or accounts.
+The test uses the real `starlims-devtools-bridge` Adapter to verify the MCP handshake, `get_capabilities`, the 19 tools exposed at that time (the current devtools profile has 37), both provenance origins, and the single `SCM_API` backend. It also reads the enterprise tree, checked-out items, and check-in history. Output contains counts only and does not print STARLIMS names, code, addresses, or accounts.
 
 `npm run check` 会构建 ESM/CommonJS、执行契约测试，并离线校验全部 Vendor 快照。
 

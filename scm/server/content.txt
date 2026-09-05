@@ -1,0 +1,74 @@
+Package Name: SCM_API
+Package Date: 2026-08-30 17:26:00
+
+Exported languages: English.
+
+Application Category: SCM
+	Application: FormDesigner
+		HTML Forms:
+			- dlgAnchor
+			- dlgImagePicker
+			- FormDesigner
+		Data Sources:
+			- dsBool
+			- dsCboForms
+			- dsControlProperties
+			- dsForms
+			- dsGetImageCategories
+			- dsGetImages
+		Server Scripts:
+			- scGetFormCode
+			- scGetFormCodeBehind
+			- scInitFormProperties
+			- scInstall
+			- scModifyCodeBehind
+
+
+Client Script Category: FormDesigner
+	- ContextMenu
+	- GUIFunctions
+	- ReadXML
+	- SaveXML
+	- TreeView
+
+Server Script Category: SCM_API
+	- Add
+	- CheckIn
+	- CheckInAll
+	- CheckOut
+	- ClearLog
+	- Delete
+	- ExportPackage
+	- GetAllItems
+	- GetCheckedOutItems
+	- GetCode
+	- GetEnterpriseItems
+	- GetItemByGUID
+	- GetItemGUID
+	- GetLanguages
+	- GetSessions
+	- GlobalSearch
+	- ImportPackage
+	- Move
+	- Rename
+	- RunScript
+	- SaveCode
+	- Search
+	- TableAdd
+	- TableCommand
+	- TableDefinition
+	- TableGetById
+	- TableSave
+	- TicketManagement
+	- UndoCheckOut
+	- Utils
+	- Version
+	- GetTickets
+	- McpGetSCMUsers
+	- McpGetCheckInHistory
+	- McpExportPackage
+	- McpImportPackage
+
+
+Table database: DICTIONARY
+	- CONTROL_PROPERTIES

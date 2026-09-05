@@ -23,6 +23,12 @@ test('profiles preserve host compatibility without conflicting save schemas', ()
   assert.ok(devtools.includes('get_form_resources'));
   assert.ok(devtools.includes('save_form_resources'));
   assert.ok(devtools.includes('set_form_resource'));
+  assert.equal(devtools.length, 36, 'DevTools has 36 shared contracts plus get_capabilities, with no host additions.');
+  for (const id of ['get_menu_configuration', 'plan_menu_item', 'apply_menu_item', 'open_form_preview', 'capture_form_screenshot', 'validate_ssl', 'get_editor_diagnostics', 'get_devtools_output', 'create_item', 'edit_table']) {
+    assert.ok(devtools.includes(id), `${id} must be owned by the shared catalog`);
+  }
+  assert.equal(findToolContract('edit_table')!.inputSchema.safeParse({ uri: '/Tables/T', tableXml: '<TableDTO/>' }).success, false);
+  assert.equal(findToolContract('edit_table')!.inputSchema.safeParse({ uri: '/Tables/T', tableXml: '<TableDTO/>', expectedVersion: 'read-version' }).success, true);
 });
 
 test('capability document exposes only tools implemented by the adapter', async () => {

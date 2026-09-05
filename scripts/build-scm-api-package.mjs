@@ -1,0 +1,59 @@
+import { createHash } from 'node:crypto';
+import { readFile, writeFile, copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+
+const root = resolve(import.meta.dirname, '..');
+const source = join(root, 'scm', 'server');
+const target = join(root, 'scm', 'distribution', 'SCM_API.sdp');
+const releaseTarget = join(root, 'release-assets', 'SCM_API.sdp');
+const temporaryRoot = await mkdtemp(join(tmpdir(), 'starlims-scm-api-'));
+const temporaryPackage = join(temporaryRoot, 'SCM_API.zip');
+const packageEntries = [
+  'Applications',
+  'Client Scripts',
+  'Global Resources',
+  'Images',
+  'SCM Images',
+  'Server Scripts',
+  'Tables',
+  'content.txt',
+  'manifest.xml'
+];
+
+function run(command, args, cwd) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, { cwd, stdio: 'inherit', windowsHide: true });
+    child.once('error', reject);
+    child.once('exit', (code) => code === 0 ? resolvePromise() : reject(new Error(`${command} exited with code ${code}.`)));
+  });
+}
+
+try {
+  if (process.platform === 'win32') {
+    const paths = packageEntries.map((entry) => `'${join(source, entry).replaceAll("'", "''")}'`).join(',');
+    await run('powershell.exe', ['-NoProfile', '-Command', `Compress-Archive -LiteralPath ${paths} -DestinationPath '${temporaryPackage.replaceAll("'", "''")}' -Force`], root);
+  } else {
+    // Exclude host-specific extra fields and directory records. Directory
+    // mtimes change when the generated SDP is replaced and otherwise make an
+    // unchanged source tree produce a different archive on every build.
+    await run('zip', ['-q', '-X', '-D', '-r', temporaryPackage, ...packageEntries], source);
+  }
+  // The Windows hosted runner keeps the repository and OS temp directory on
+  // different drives. copyFile works across volumes; rename fails with EXDEV.
+  await copyFile(temporaryPackage, target);
+  await mkdir(dirname(releaseTarget), { recursive: true });
+  await copyFile(target, releaseTarget);
+  const digest = createHash('sha256').update(await readFile(target)).digest('hex');
+  await writeFile(target + '.sha256', `${digest}  SCM_API.sdp\n`);
+  const manifestPath = join(root, 'scm', 'distribution', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.sha256 = digest;
+  manifest.maintainedSource = 'scm/server';
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+  console.log(`Built unified ${target}`);
+  console.log(`Copied release artifact to ${releaseTarget}`);
+} finally {
+  await rm(temporaryRoot, { recursive: true, force: true });
+}

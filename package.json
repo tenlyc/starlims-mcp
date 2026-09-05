@@ -21,17 +21,22 @@
     "cjs",
     "README.md",
     "LICENSE",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "scm/distribution",
+    "scm/server",
+    "docs"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json",
     "build:devtools-server": "node scripts/build-devtools-server.mjs",
     "prepare": "npm run build",
-    "test": "npm run build && node --test dist/tests/*.test.js && npm run vendor:verify",
+    "test": "npm run build && node --test dist/tests/*.test.js && npm run vendor:verify && node scripts/generate-tool-reference.mjs --check",
     "vendor:verify": "node scripts/verify-vendor.mjs",
     "vendor:refresh": "node scripts/refresh-vendor-manifests.mjs",
     "vendor:index": "node scripts/rebuild-vendor-index.mjs",
-    "check": "npm run test"
+    "check": "npm run test",
+    "build:scm-api": "node scripts/build-scm-api-package.mjs",
+    "docs:tools": "node scripts/generate-tool-reference.mjs"
   },
   "repository": "https://github.com/tenlyc/starlims-mcp",
   "license": "MIT",
