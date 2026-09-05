@@ -1,15 +1,21 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StarlimsHttpAdapter = void 0;
+const query_database_js_1 = require("../query-database.js");
+const catalog_js_1 = require("../catalog.js");
+const menu_service_js_1 = require("../menu-service.js");
+const table_definition_js_1 = require("../table-definition.js");
 const checkin_verification_js_1 = require("../checkin-verification.js");
 const xmldom_1 = require("@xmldom/xmldom");
 const form_resources_js_1 = require("../form-resources.js");
 const form_resource_binding_js_1 = require("../form-resource-binding.js");
 const READ_CAPABILITIES = [
     'items.browse', 'items.search', 'code.search', 'languages.list', 'code.read',
-    'forms.resources.read', 'tables.read'
+    'forms.resources.read', 'tables.read', 'database.query', 'logs.read', 'checkout.list', 'scm.history', 'menus.read'
 ];
-const WRITE_CAPABILITIES = ['checkout.write', 'code.write', 'forms.resources.write', 'checkout.checkin'];
+const WRITE_CAPABILITIES = ['database.change', 'checkout.write', 'code.write', 'forms.resources.write', 'checkout.checkin',
+    'checkout.undo', 'items.create', 'tables.checkout', 'tables.checkin', 'tables.create', 'tables.write',
+    'scripts.execute', 'datasource.execute', 'menus.write'];
 function objectValue(value) {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
@@ -32,13 +38,31 @@ class StarlimsHttpAdapter {
     capabilities;
     backendVersion;
     connected = false;
+    menus;
     constructor(config, logger, fetchImpl = fetch) {
         this.config = config;
         this.logger = logger;
         this.fetchImpl = fetchImpl;
-        this.capabilities = config.permissionPolicy === 'allow-writes'
+        // A host cannot silently switch credentials while retaining plans from another session.
+        this.config = Object.freeze({ ...config });
+        this.capabilities = Object.freeze(config.permissionPolicy === 'allow-writes'
             ? [...READ_CAPABILITIES, ...WRITE_CAPABILITIES]
-            : [...READ_CAPABILITIES];
+            : [...READ_CAPABILITIES]);
+        this.menus = new menu_service_js_1.MenuMcpService({
+            getSessionKey: () => JSON.stringify([this.config.baseUrl, this.config.user, this.config.language]),
+            getItemCode: async (uri, language) => (await this.readCode(uri, language)).code,
+            getLanguages: async () => {
+                const result = await this.listLanguages({ maxItems: 10000 });
+                return result.languages.map(item => item.id);
+            },
+            // These fixed internal reads do not expose arbitrary RunScript access in read-only mode.
+            runDataSource: (uri, parameters, options) => this.runScript(uri, parameters, options),
+            runScript: (uri, parameters, options) => {
+                if (options.entryPoint !== 'ResolveForm')
+                    this.assertWriteAllowed('apply_menu_item');
+                return this.runScript(uri, parameters, options);
+            }
+        });
     }
     async connect() {
         const session = await this.request('GetSessions');
@@ -59,9 +83,39 @@ class StarlimsHttpAdapter {
             source: 'MrDoe/starlimsvscode'
         }];
     async invoke(tool, arguments_) {
+        const contract = (0, catalog_js_1.findToolContract)(tool);
+        if (!contract)
+            throw new Error(`Unknown STARLIMS tool '${tool}'.`);
+        if (contract.risk !== 'read')
+            this.assertWriteAllowed(tool);
+        if (!this.capabilities.includes(contract.capability) || !contract.profiles.includes(this.config.profile)) {
+            throw new Error(`STARLIMS HTTP adapter does not implement tool '${tool}' in this profile.`);
+        }
+        arguments_ = contract.inputSchema.parse(arguments_);
         if (!this.connected)
             await this.connect();
         switch (tool) {
+            case 'read_log': return this.readLog(arguments_);
+            case 'list_checked_out_items': return this.listCheckedOutItems(arguments_);
+            case 'query_checkin_history': return this.checkinHistory(arguments_);
+            case 'create_item': return this.createItem(arguments_);
+            case 'create_table': return this.createTable(arguments_);
+            case 'edit_table': return this.editTable(arguments_);
+            case 'checkout_table': return this.checkoutTable(arguments_);
+            case 'checkin_table':
+                this.tableUri(String(arguments_.uri));
+                return this.checkin(arguments_);
+            case 'undo_checkout': return this.undoCheckout(arguments_);
+            case 'execute_server_script': return this.execute(arguments_, false);
+            case 'execute_data_source': return this.execute(arguments_, true);
+            case 'get_menu_configuration':
+            case 'plan_menu_item':
+            case 'apply_menu_item': return this.menus.execute(tool, arguments_);
+            case 'execute_database_change': {
+                this.assertWriteAllowed(tool);
+                return (0, query_database_js_1.databaseQueryResult)(await this.request('McpExecuteDatabaseChange', { method: 'POST', body: (0, query_database_js_1.prepareDatabaseChange)(arguments_) }));
+            }
+            case 'query_database': return (0, query_database_js_1.databaseQueryResult)(await this.request('McpQueryDatabase', { method: 'POST', body: (0, query_database_js_1.prepareDatabaseQuery)(arguments_) }));
             case 'browse_tree': return this.browseTree(arguments_);
             case 'search_by_name': return this.searchByName(arguments_);
             case 'global_code_search': return this.globalCodeSearch(arguments_);
@@ -69,7 +123,7 @@ class StarlimsHttpAdapter {
             case 'get_item_code': return this.getItemCodeTool(arguments_);
             case 'get_table_definition': return this.getTableDefinition(arguments_);
             case 'get_form_resources': return this.getFormResources(arguments_);
-            case 'checkout_item': return this.checkout(arguments_);
+            case 'checkout_item': return String(arguments_.uri).startsWith('/Tables/') ? this.checkoutTable(arguments_) : this.checkout(arguments_);
             case 'save_item': return this.saveItem(arguments_);
             case 'checkin_item': return this.checkin(arguments_);
             case 'save_form_resources': return this.saveFormResources(arguments_);
@@ -93,7 +147,7 @@ class StarlimsHttpAdapter {
             method: options.method || 'GET',
             headers: {
                 'content-type': 'application/json',
-                accept: 'application/json',
+                accept: options.allowText ? 'application/json, text/plain' : 'application/json',
                 STARLIMSUser: this.config.user,
                 STARLIMSPass: this.config.password
             },
@@ -107,16 +161,219 @@ class StarlimsHttpAdapter {
             result = JSON.parse(text);
         }
         catch {
+            if (options.allowText && !/\b(?:json|html)\b/i.test(response.headers.get('content-type') || '') && !/^\s*<(?:!doctype\s+html|html)\b/i.test(text)) {
+                return { success: true, data: text };
+            }
             throw new Error(`SCM_API.${endpoint} returned a non-JSON response.`);
         }
+        if (options.allowText && typeof result === 'string')
+            return { success: true, data: result };
         const object = objectValue(result);
-        if (object.success === false)
-            throw new Error(String(object.message || object.error || object.data || `SCM_API.${endpoint} failed.`));
+        if (object.success !== true)
+            throw new Error(String(object.message || object.error || object.data || `SCM_API.${endpoint} returned an invalid or unsuccessful response.`));
         return object;
     }
     normalizeItems(result) {
         const data = objectValue(result.data);
         return arrayValue(data.items).length ? arrayValue(data.items) : arrayValue(result.data);
+    }
+    assertAccepted(response, operation) {
+        let current = response;
+        for (let depth = 0; depth < 5; depth++) {
+            if ((depth === 0 && current.success !== true) || current.success === false ||
+                (typeof current.data === 'string' && /^\s*ERROR\b/i.test(current.data))) {
+                throw new Error(`${operation} failed: ${String(current.error || current.message || current.data || 'invalid response')}`);
+            }
+            const nested = objectValue(current.data);
+            if (!('success' in nested))
+                return;
+            current = nested;
+        }
+        throw new Error(`${operation} returned too many nested response envelopes.`);
+    }
+    async readLog(args) {
+        const user = String(args.user ?? this.config.user).trim();
+        if (!user || /[\\/\u0000-\u001f]/.test(user) || user === '.' || user === '..')
+            throw new Error('Invalid STARLIMS log user.');
+        const response = await this.request('GetCode', { query: { URI: `/ServerLogs/${user}.log`, UserLang: this.config.language }, allowText: true });
+        // A log beginning with ERROR is valid content, not a failed mutation envelope.
+        if (response.success !== true)
+            throw new Error('Invalid server log response.');
+        const content = typeof response.data === 'string' ? response.data : objectValue(response.data).code;
+        if (typeof content !== 'string')
+            throw new Error('STARLIMS returned an invalid server log response.');
+        const empty = !content.trim() || /^there is no log file\b/i.test(content.trim());
+        const lines = empty ? [] : content.replace(/\r\n/g, '\n').split('\n');
+        if (lines.at(-1) === '')
+            lines.pop();
+        const maxLines = Math.min(Number(args.maxLines ?? 500), 10000);
+        const tail = lines.slice(-maxLines).join('\n');
+        const maxCharacters = 1000000;
+        const log = tail.slice(-maxCharacters);
+        return { user, log, empty, totalLines: lines.length, returnedLines: log ? log.split('\n').length : 0,
+            totalCharacters: content.length, truncated: lines.length > maxLines || tail.length > maxCharacters };
+    }
+    async listCheckedOutItems(args) {
+        const response = await this.request('GetCheckedOutItems', { query: args.includeAllUsers === true ? { allUsers: 'true' } : {} });
+        this.assertAccepted(response, 'Read checkouts');
+        (0, checkin_verification_js_1.pendingCheckoutIds)(response.data); // Reject unavailable status instead of reporting an empty list.
+        let items;
+        if (typeof response.data === 'string') {
+            const doc = new xmldom_1.DOMParser({ onError: (_level, message) => { throw new Error(message); } }).parseFromString(response.data, 'application/xml');
+            items = Array.from(doc.getElementsByTagName('*')).filter(node => node.localName === 'PendingCheckins').map(row => {
+                const fields = Object.fromEntries(Array.from(row.childNodes).filter(node => node.nodeType === 1).map(node => [node.nodeName, node.textContent || '']));
+                return { ...fields, guid: fields.CHILDID, name: fields.CHILDNAME, type: fields.CHILDTYPE,
+                    checkedOutBy: fields.CHECKEDOUTBY, checkedOutDate: fields.CHECKEDOUTDATE, language: fields.LANGID || null };
+            });
+        }
+        else
+            items = this.normalizeItems(response);
+        return { items, totalItems: items.length, includeAllUsers: args.includeAllUsers === true };
+    }
+    async checkinHistory(args) {
+        const filter = { user: String(args.user), dateFrom: String(args.dateFrom), dateTo: String(args.dateTo) };
+        const validDate = (date) => { const value = new Date(`${date}T00:00:00Z`); return Number.isFinite(value.getTime()) && value.toISOString().slice(0, 10) === date; };
+        if (!validDate(filter.dateFrom) || !validDate(filter.dateTo) || filter.dateFrom > filter.dateTo)
+            throw new Error('Invalid inclusive check-in history date range.');
+        const result = await this.runScript('/ServerScripts/SCM_API/McpGetCheckInHistory', [filter.user, filter.dateFrom, filter.dateTo]);
+        const payload = objectValue(result.output);
+        if (payload.success === false || !Array.isArray(payload.items))
+            throw new Error(String(payload.error || 'Invalid check-in history response; install compatible SCM_API.McpGetCheckInHistory.'));
+        return { filter, items: payload.items, totalItems: payload.items.length };
+    }
+    async runScript(uri, parameters, options = {}) {
+        const started = Date.now();
+        const response = await this.request('RunScript', { method: 'POST', body: {
+                URI: uri, Parameters: parameters, EntryPoint: options.entryPoint, OutputType: options.outputType || 'ARRAY', MaxRows: options.maxRows
+            } });
+        if (response.success !== true)
+            throw new Error('Invalid RunScript response. Execution may have occurred; do not automatically retry.');
+        return { success: true, output: response.data ?? null, executionTime: Date.now() - started,
+            totalRows: typeof response.totalRows === 'number' ? response.totalRows : undefined, rowsTruncated: response.rowsTruncated === true };
+    }
+    async execute(args, dataSource) {
+        const uri = String(args.uri);
+        const folder = dataSource ? 'DataSources' : 'ServerScripts';
+        if (!new RegExp(`^/(?:${folder}/[^/]+|Applications/[^/]+/[^/]+/${folder})/[^/]+$`).test(uri))
+            throw new Error(`Expected a ${folder} item URI.`);
+        if (args.entryPoint !== undefined && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(args.entryPoint)))
+            throw new Error('entryPoint must name one server procedure.');
+        const outputType = String(args.outputType || 'ARRAY');
+        const result = await this.runScript(uri, args.parameters || [], {
+            entryPoint: args.entryPoint, outputType,
+            ...(dataSource ? { maxRows: Math.min(Number(args.maxRows ?? 100), 10000) } : {})
+        });
+        const text = typeof result.output === 'string' ? result.output : JSON.stringify(result.output);
+        const bounded = truncate(text, args.maxCharacters);
+        return { uri, ...result, output: bounded.truncated ? bounded.value : result.output, outputType,
+            totalCharacters: bounded.totalCharacters, truncated: bounded.truncated, outputEncoding: bounded.truncated ? 'text-fragment' : 'native' };
+    }
+    async createItem(args) {
+        const itemName = String(args.itemName).trim(), itemType = String(args.itemType).trim().toUpperCase();
+        const categoryName = String(args.categoryName).trim(), appName = String(args.appName).trim();
+        const language = String(args.language).trim();
+        const types = ['APPCATEGORY', 'APP', 'HTMLFORMXML', 'XFDFORMXML', 'APPSS', 'APPDS', 'APPCS', 'SS', 'DS', 'CS', 'SSCATEGORY', 'SSCAT', 'DSCATEGORY', 'DSCAT', 'CSCATEGORY', 'CSCAT'];
+        if (!types.includes(itemType))
+            throw new Error(`Unsupported create item type '${itemType}'.`);
+        if ([itemName, categoryName, appName].some(value => !value || /[\\/\u0000-\u001f]/.test(value) || value === '.' || value === '..'))
+            throw new Error('Invalid item, category or application name.');
+        if (!language)
+            throw new Error('An explicit item language is required.');
+        const parentUri = itemType === 'APPCATEGORY' ? '/Applications' : itemType === 'APP' ? `/Applications/${categoryName}`
+            : ['HTMLFORMXML', 'XFDFORMXML', 'APPSS', 'APPDS', 'APPCS'].includes(itemType) ? `/Applications/${categoryName}/${appName}`
+                : itemType.startsWith('SS') ? `/ServerScripts${itemType === 'SS' ? '/' + categoryName : ''}`
+                    : itemType.startsWith('DS') ? `/DataSources${itemType === 'DS' ? '/' + categoryName : ''}`
+                        : `/ClientScripts${itemType === 'CS' ? '/' + categoryName : ''}`;
+        const response = await this.request('Add', { method: 'POST', body: {
+                lid: parentUri, name: itemName, itemType, ItemName: itemName, ItemType: itemType, Language: language,
+                Category: categoryName, AppName: appName
+            } });
+        this.assertAccepted(response, 'Create item');
+        return { created: true, itemName, itemType, categoryName, appName, language, parentUri, runtimeVerified: false };
+    }
+    tableUri(uri) {
+        if (!/^\/Tables\/[^/]+\/[^/]+$/.test(uri))
+            throw new Error('Expected /Tables/<connection>/<table> URI.');
+        return uri;
+    }
+    async readTableXml(uri) {
+        const response = await this.request('TableGetById', { query: { URI: uri } });
+        this.assertAccepted(response, 'Read table');
+        if (typeof response.data !== 'string' || !response.data.trim())
+            throw new Error('STARLIMS returned no editable table definition.');
+        (0, table_definition_js_1.tableDefinitionVersion)(response.data);
+        return response.data;
+    }
+    async checkoutStatus() {
+        const response = await this.request('GetCheckedOutItems');
+        this.assertAccepted(response, 'Read checkouts');
+        return (0, checkin_verification_js_1.pendingCheckoutIds)(response.data);
+    }
+    async checkoutTable(args) {
+        const uri = this.tableUri(String(args.uri)), id = (0, table_definition_js_1.tableDefinitionId)(await this.readTableXml(uri));
+        if (!id)
+            throw new Error('Table definition has no target Id.');
+        const hasTarget = (ids) => ids.includes(id.toLowerCase()) || ids.includes(uri.toLowerCase());
+        if (hasTarget(await this.checkoutStatus()))
+            return { uri, checkedOut: true, alreadyCheckedOut: true };
+        this.assertAccepted(await this.request('CheckOut', { query: { URI: uri } }), 'Table checkout');
+        if (!hasTarget(await this.checkoutStatus()))
+            throw new Error('Table checkout was not verified by read-back.');
+        return { uri, checkedOut: true, verified: true };
+    }
+    async createTable(args) {
+        const tableName = String(args.tableName).trim().toUpperCase(), dsn = String(args.dsn).trim();
+        const uri = this.tableUri(`/Tables/${dsn}/${tableName}`);
+        if (!tableName || !dsn || /[\\\u0000-\u001f]/.test(uri))
+            throw new Error('Invalid table name or connection.');
+        const response = await this.request('TableAdd', { method: 'POST', body: { TableName: tableName, Dsn: dsn } });
+        this.assertAccepted(response, 'Create table');
+        const definition = await this.readTableXml(uri);
+        return { uri, created: true, tableName, dsn, verified: true, version: (0, form_resources_js_1.contentVersion)((0, table_definition_js_1.tableDefinitionVersion)(definition)), result: response.data };
+    }
+    async editTable(args) {
+        const uri = this.tableUri(String(args.uri)), requested = (0, table_definition_js_1.prepareTableCaptionXml)(String(args.tableXml));
+        const before = await this.readTableXml(uri), id = (0, table_definition_js_1.tableDefinitionId)(before);
+        if (!id || (0, table_definition_js_1.tableDefinitionId)(requested).toLowerCase() !== id.toLowerCase())
+            throw new Error('The submitted TableDTO must retain the target table Id.');
+        const version = (xml) => (0, form_resources_js_1.contentVersion)((0, table_definition_js_1.tableDefinitionVersion)(xml));
+        const assertVersion = (xml) => { if (args.expectedVersion !== version(xml))
+            throw new Error('Remote table changed after it was read; save blocked by content-version gate.'); };
+        assertVersion(before);
+        const pending = await this.checkoutStatus();
+        if (!pending.includes(id.toLowerCase()) && !pending.includes(uri.toLowerCase()))
+            throw new Error('Check out the table before saving its definition.');
+        assertVersion(await this.readTableXml(uri));
+        const response = await this.request('TableSave', { method: 'POST', body: { URI: uri, TableXml: requested } });
+        this.assertAccepted(response, 'Save table');
+        const definition = await (0, table_definition_js_1.waitForTableReadBack)(() => this.readTableXml(uri), requested, before);
+        return { uri, saved: true, verified: true, definition, version: version(definition), result: response.data };
+    }
+    async undoCheckout(args) {
+        const uri = (0, checkin_verification_js_1.checkinTargetUri)(String(args.uri)), guid = await this.resolveTargetId(uri);
+        const hasTarget = (ids) => ids.includes(guid.toLowerCase()) || ids.includes(uri.toLowerCase());
+        if (!hasTarget(await this.checkoutStatus()))
+            throw new Error('The target is not checked out by the current user. No undo was submitted.');
+        this.assertAccepted(await this.request('UndoCheckOut', { query: { URI: uri } }), 'Undo checkout');
+        if (hasTarget(await this.checkoutStatus()))
+            throw new Error('Undo checkout returned success but the target is still checked out. Do not automatically retry.');
+        return { uri, undone: true, verified: true };
+    }
+    async resolveTargetId(uri) {
+        if (uri.startsWith('/Tables/')) {
+            const id = (0, table_definition_js_1.tableDefinitionId)(await this.readTableXml(this.tableUri(uri)));
+            if (id)
+                return id;
+        }
+        else {
+            const items = this.normalizeItems(await this.request('Search', { query: { itemName: uri.slice(uri.lastIndexOf('/') + 1), exactMatch: 'true' } })).map(objectValue);
+            const guid = items.find(item => (0, checkin_verification_js_1.checkinTargetUri)(String(item.uri || item.id)).toLowerCase() === uri.toLowerCase())?.guid;
+            if (typeof guid === 'string' && guid)
+                return guid;
+            if (/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(uri))
+                return uri;
+        }
+        throw new Error('Cannot resolve the exact target GUID. No mutation was submitted.');
     }
     async browseTree(args) {
         const uri = String(args.uri || '');
@@ -162,10 +419,9 @@ class StarlimsHttpAdapter {
     }
     async getTableDefinition(args) {
         const uri = String(args.uri || '');
-        const response = await this.request('TableGetById', { query: { URI: uri } });
-        const definition = typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? null);
+        const definition = await this.readTableXml(uri);
         const bounded = truncate(definition, args.maxCharacters);
-        return { uri, definition: bounded.value, version: (0, form_resources_js_1.contentVersion)(definition), totalCharacters: bounded.totalCharacters, truncated: bounded.truncated };
+        return { uri, definition: bounded.value, version: (0, form_resources_js_1.contentVersion)((0, table_definition_js_1.tableDefinitionVersion)(definition)), totalCharacters: bounded.totalCharacters, truncated: bounded.truncated };
     }
     async getFormResources(args) {
         const uri = (0, form_resources_js_1.normalizeFormResourcesUri)(String(args.uri || ''));
@@ -226,11 +482,7 @@ class StarlimsHttpAdapter {
         const uri = String(args.uri || '');
         const targetUri = (0, checkin_verification_js_1.checkinTargetUri)(uri);
         const language = this.language(args.language);
-        const items = this.normalizeItems(await this.request('Search', { query: { itemName: targetUri.slice(targetUri.lastIndexOf('/') + 1), exactMatch: 'true' } })).map(objectValue);
-        const guid = items.find((item) => (0, checkin_verification_js_1.checkinTargetUri)(String(item.uri || item.id)).toLowerCase() === targetUri.toLowerCase())?.guid
-            || (/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(targetUri) ? targetUri : undefined);
-        if (typeof guid !== 'string')
-            throw new Error('Cannot resolve the exact check-in target GUID. No check-in was submitted.');
+        const guid = await this.resolveTargetId(targetUri);
         const status = async () => {
             const response = await this.request('GetCheckedOutItems');
             if (response.success !== true)

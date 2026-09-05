@@ -4,7 +4,7 @@ Connect AI applications to STARLIMS to read and edit code, forms and multilingua
 
 **starlims-mcp owns the shared MCP interfaces. STARLIMS DevTools integrates them and provides the development UI.**
 
-[Download v0.5.2](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.5.2) · [DevTools downloads](https://github.com/tenlyc/starlims-devtools/releases) · [Tool catalog](docs/TOOLS.md) · [简体中文](README.md)
+[Download v0.6.0](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.6.0) · [DevTools downloads](https://github.com/tenlyc/starlims-devtools/releases) · [Tool catalog](docs/TOOLS.md) · [简体中文](README.md)
 
 ## Use through DevTools
 
@@ -22,19 +22,21 @@ Standalone mode connects directly to STARLIMS without the DevTools desktop app. 
 
 See the [standalone guide](docs/STANDALONE.md) for installation and connection settings.
 
-| Mode in v0.5.2 | Tools, including discovery | Available work |
+| Mode in v0.6.0 | Tools, including discovery | Available work |
 | --- | ---: | --- |
-| DevTools | 37 | Page development, tables, resources, menus and previews |
-| Standalone, default read-only | 8 | Browse, search, read code, resources and table definitions |
-| Standalone, writes enabled | 13 | Also check out, save, edit resources and check in |
+| DevTools | 39 | Page development, tables, resources, menus and previews |
+| Standalone, default read-only | 14 | Code, resources, tables, logs, checkout/history, menu planning and database queries |
+| Standalone, writes enabled | 29 | Also maintain objects/tables, execute scripts/data sources, create menus and approve database changes |
 
-Standalone mode does not yet implement all desktop capabilities. Ask the AI to call `get_capabilities` to see what the current connection supports. Actual operations remain subject to STARLIMS permissions; successful saves require separate runtime verification.
+**v0.6.0 provides 14 read-only tools or 29 with writes enabled (including discovery, default `unified` profile).** Logs, checkout/history, object and table maintenance, script/data-source execution, and menu configuration connect directly to SCM_API without DevTools. DevTools 1.7.0 Beta 7 reuses the same server execution implementation.
+
+The remaining 10 tools need a host: preview/browser inspection, SSL validation, editor diagnostics and DevTools output. Arbitrary script/data-source execution requires `allow-writes`. Database tools require the matching backend scripts. See the [standalone capability matrix](docs/STANDALONE.md). `get_capabilities` lists registered adapter support; backend compatibility and account permissions require actual calls. Successful saves still require separate runtime verification.
 
 ## Server package
 
 `SCM_API.sdp` is imported into STARLIMS so MCP can access the system. This repository maintains and releases it; DevTools distributes the identical package.
 
-The [release](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.5.2) includes the SDP, its checksum and provenance manifest. The `starlims-mcp-devtools-server.cjs` file and checksum are used for DevTools MCP service updates. Updating that service does not automatically import an SDP.
+The [release](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.6.0) includes the SDP, its checksum and provenance manifest. The `starlims-mcp-devtools-server.cjs` file and checksum are used for DevTools MCP service updates. Updating that service does not automatically import an SDP.
 
 ## More documentation
 
@@ -46,3 +48,5 @@ The [release](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.5.2) includ
 ## License
 
 This is an unofficial community project, not affiliated with or supported by STARLIMS Corporation. Some capabilities reference the MIT-licensed [MrDoe/starlimsvscode](https://github.com/MrDoe/starlimsvscode). See [MIT License](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+v0.6.0 adds [database queries and per-call approved changes](docs/DATABASE_ACCESS.md) using the existing STARLIMS Database connection.

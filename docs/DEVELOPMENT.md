@@ -33,6 +33,7 @@ AI client
    ▼
 @tenlyc/starlims-mcp       shared contracts, schemas, risks, capabilities
    │ Adapter
+   ├── standalone HTTP   direct SCM_API calls, read-only/write policy
    ├── starlims-devtools   Electron session, approvals, write gates
    ├── starlimsvscode      VS Code workspace compatibility
    └── future tools        CLI, web, test runner, other STARLIMS products
@@ -105,7 +106,7 @@ The importer requires a clean source repository whose `HEAD` exactly matches the
 import { createStarlimsMcpServer } from '@tenlyc/starlims-mcp';
 
 const server = createStarlimsMcpServer({
-  version: '0.5.2',
+  version: '0.6.0',
   profile: 'devtools',
   adapter: {
     id: 'my-starlims-host',
@@ -164,7 +165,7 @@ Vendor text digests canonicalize CRLF to LF while binary files retain their orig
 
 ## 渲染端导入
 
-Electron 渲染端或浏览器只能通过 `@tenlyc/starlims-mcp/browser` 导入菜单 Schema 和工作流。根入口包含 Node 服务端模块，用于主进程或独立服务。
+Electron 渲染端或浏览器通过 `@tenlyc/starlims-mcp/browser` 导入 Schema 和工作流，通过 `@tenlyc/starlims-mcp/client` 导入共享服务器执行适配器、菜单服务与表定义验证。两个子入口均不依赖 Node 服务模块。根入口包含 Node 服务端模块，用于主进程或独立服务。
 
 ## Profile 和执行适配
 
@@ -173,3 +174,11 @@ Profile 指一组接口定义；Adapter 指实际执行这些接口的代码。D
 每个工具的 `origin` 表示来源：`starlimsvscode` 为源自或兼容上游的能力，`starlims-mcp` 为本仓库维护的自有能力。`provenance` 记录维护仓库、许可、来源关系及固定提交；DevTools 是执行宿主，不是第三种代码来源。
 
 来源与版权声明见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+
+## 共享服务器执行层（v0.6.0）
+
+`StarlimsHttpAdapter` 直接实现服务器侧工具。菜单规划与核对位于 `src/menu-service.ts`，表定义语义验证位于 `src/table-definition.ts`，两者由根入口导出供 Node 宿主复用。源自 DevTools 的这两部分不再需要 Electron、渲染进程全局 DOM 或编辑器状态。
+
+独立与 DevTools 的契约保持兼容，当前独立允许写入时提供 29 个工具；DevTools 39 个中的另外 10 个仍需浏览器/编辑器宿主。`npm run test` 中有精确集合比较，防止未来新增服务器工具时遗漏独立适配。DevTools 1.7.0 Beta 7 通过 `./client` 复用该执行层，并注入已有 Electron HTTP 传输；宿主继续负责会话、逐次审批、质量门禁、编辑器变更通知及预览。DevTools 原生多用户日志面板行为保持不变。
+
+宿主集成时，每个独立账号/环境应新建 Adapter；不得跨账号复用含菜单计划的实例。配置在构造时复制并冻结。适配器在直接 `invoke` 时也检查权限、profile、能力与工具 schema，不能通过绕过 MCP 注册层调用只读策略下的写工具。

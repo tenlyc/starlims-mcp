@@ -17,6 +17,7 @@ async function main() {
         throw new Error('The MCP port is invalid.');
     const adapter = {
         id: 'starlims-devtools-bridge',
+        confirmsDatabaseChanges: true,
         capabilities,
         invoke: async (tool, arguments_) => {
             const response = await fetch(bridgeUrl, {

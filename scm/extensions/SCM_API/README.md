@@ -10,3 +10,5 @@ Current owned extensions are `McpGetSCMUsers`, `McpGetCheckInHistory`,
 product repositories. No script is added until its contract, provenance,
 security classification, compatibility range, tests, and upgrade path are
 documented.
+
+Database access is owned here as McpQueryDatabase, McpExecuteDatabaseChange and McpDatabaseAccess. See [database access](../../../docs/DATABASE_ACCESS.md) for contracts, scope, approvals and test limitations.

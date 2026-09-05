@@ -16,7 +16,7 @@ import { ensureFormResourceBinding, inspectFormResourceBinding } from '../form-r
 const logger = { debug: () => undefined, info: () => undefined, error: () => undefined };
 const resourcesUri = '/Applications/Equipment/EQUIPMENT_MANAGER/HTMLForms/Resources/Equipment_Ledger';
 const codeUri = '/ServerScripts/TOOLS/Hello';
-test('shared server alone registers all 37 DevTools tools and preserves screenshot results', async (context) => {
+test('shared server alone registers all 39 DevTools tools and preserves screenshot results', async (context) => {
     const contracts = getProfileTools('devtools');
     const calls = [];
     const server = await startHttpTransport({ host: '127.0.0.1', port: 0, logger,
@@ -29,8 +29,8 @@ test('shared server alone registers all 37 DevTools tools and preserves screensh
     context.after(() => client.close());
     await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
     const listed = (await client.listTools()).tools.map(tool => tool.name);
-    assert.equal(listed.length, 37);
-    assert.equal(new Set(listed).size, 37);
+    assert.equal(listed.length, 39);
+    assert.equal(new Set(listed).size, 39);
     assert.deepEqual(new Set(listed), new Set(['get_capabilities', ...contracts.map(tool => tool.id)]));
     const capability = (await client.callTool({ name: 'get_capabilities', arguments: {} })).structuredContent;
     assert.deepEqual(new Set(capability.tools.map(tool => tool.id)), new Set(contracts.map(tool => tool.id)));
@@ -83,9 +83,11 @@ async function startMockScmApi(options = {}) {
         if (endpoint === 'GetLanguages')
             return json(response, { success: true, data: [['ENG', 'English'], ['CHS', 'Chinese']] });
         if (endpoint === 'TableGetById')
-            return json(response, { success: true, data: '<Table><Name>BATCHES</Name></Table>' });
+            return json(response, { success: true, data: '<TableDTO><Id>table-guid</Id><Name>BATCHES</Name></TableDTO>' });
         if (endpoint === 'GetCode') {
             const uri = url.searchParams.get('URI') || '';
+            if (uri.startsWith('/ServerLogs/'))
+                return json(response, { success: true, data: { code: 'first\nlast', language: 'LOG' } });
             const language = url.searchParams.get('UserLang') || 'ENG';
             reads.set(uri, (reads.get(uri) || 0) + 1);
             options.beforeReadCode?.(uri, reads.get(uri), codes);
@@ -274,7 +276,13 @@ test('CLI exposes the standalone read-only server over stdio', async (context) =
     await client.connect(transport);
     const tools = await client.listTools();
     assert.ok(tools.tools.some((tool) => tool.name === 'get_item_code'));
+    assert.equal(tools.tools.length, 14);
+    assert.ok(tools.tools.some((tool) => tool.name === 'read_log'));
     assert.ok(!tools.tools.some((tool) => tool.name === 'save_item'));
+    assert.ok(!tools.tools.some((tool) => tool.name === 'execute_server_script'));
+    const log = await client.callTool({ name: 'read_log', arguments: { maxLines: 1 } });
+    assert.equal(log.isError, undefined);
+    assert.equal(log.structuredContent.log, 'last');
     const result = await client.callTool({ name: 'get_item_code', arguments: { uri: codeUri, language: 'ENG' } });
     assert.equal(result.isError, undefined);
     assert.match(JSON.stringify(result.structuredContent), /hello/);

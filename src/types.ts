@@ -21,6 +21,8 @@ export interface BackendComponentVersion {
 }
 
 export interface StarlimsMcpAdapter {
+  /** Trusted host adapter must enforce a fresh human approval for every database change, including direct runtime calls. */
+  readonly confirmsDatabaseChanges?: boolean;
   id: string;
   capabilities: readonly string[];
   invoke(tool: string, arguments_: Record<string, unknown>): Promise<unknown>;

@@ -1,4 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+const randomUUID = () => globalThis.crypto.randomUUID();
 import { DOMParser, XMLSerializer, DOMImplementation, type Document, type Element } from '@xmldom/xmldom';
 
 export type FormResourceEntry = {
@@ -176,7 +178,7 @@ export function setFormResourceValue(payload: string, resourceId: string, resour
 }
 
 export function contentVersion(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
+  return bytesToHex(sha256(new TextEncoder().encode(value)));
 }
 
 export function sameFormResources(left: string, right: string): boolean {

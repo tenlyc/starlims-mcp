@@ -5,7 +5,7 @@ import { createStderrLogger } from './logger.js';
 import { createStarlimsMcpServer } from './server.js';
 import { connectStdio, startHttpTransport } from './transports.js';
 
-const VERSION = '0.5.1';
+const VERSION = '0.6.0';
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);

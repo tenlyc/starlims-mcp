@@ -1,0 +1,1 @@
+{"version":3,"file":"client.js","sourceRoot":"","sources":["../src/client.ts"],"names":[],"mappings":"AAAA,2GAA2G;AAC3G,OAAO,EAAE,mBAAmB,EAAE,MAAM,qCAAqC,CAAC;AAC1E,OAAO,EAAE,gBAAgB,EAAE,MAAM,cAAc,CAAC;AAChD,OAAO,EAAE,cAAc,EAAE,QAAQ,EAAE,MAAM,mBAAmB,CAAC;AAE7D,cAAc,uBAAuB,CAAC;AACtC,OAAO,EAAE,cAAc,EAAE,yBAAyB,EAAE,kBAAkB,EAAE,MAAM,qBAAqB,CAAC"}

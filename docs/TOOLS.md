@@ -2,7 +2,7 @@
 
 Generated from the shared catalog. Do not edit this table by hand.
 
-unified: 40 tools including get_capabilities; devtools: 37 tools including get_capabilities; vscode-compat: 26 tools including get_capabilities
+unified: 42 tools including get_capabilities; devtools: 39 tools including get_capabilities; vscode-compat: 26 tools including get_capabilities
 
 Tools are filtered by adapter support and permission policy. Profiles describe contracts, not a promise that every adapter implements every tool.
 
@@ -36,6 +36,8 @@ Tools are filtered by adapter support and permission policy. Profiles describe c
 | set_form_resource | forms.resources.write | write | unified, devtools, vscode-compat |
 | checkin_item | checkout.checkin | write | unified, devtools, vscode-compat |
 | undo_checkout | checkout.undo | destructive | unified, devtools, vscode-compat |
+| query_database | database.query | read | unified, devtools |
+| execute_database_change | database.change | destructive | unified, devtools |
 | execute_server_script | scripts.execute | execute | unified, devtools, vscode-compat |
 | execute_data_source | datasource.execute | execute | unified, devtools, vscode-compat |
 | list_checked_out_items | checkout.list | read | unified, devtools |

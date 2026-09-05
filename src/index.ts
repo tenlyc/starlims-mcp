@@ -11,3 +11,8 @@ export * from './transports.js';
 export * from './menu-schema.js';
 export * from './workflow-instructions.js';
 export * from './instructions.js';
+
+export * from './query-database.js';
+
+export * from './menu-service.js';
+export * from './table-definition.js';

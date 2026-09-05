@@ -6,7 +6,7 @@ const config_js_1 = require("./config.js");
 const logger_js_1 = require("./logger.js");
 const server_js_1 = require("./server.js");
 const transports_js_1 = require("./transports.js");
-const VERSION = '0.5.1';
+const VERSION = '0.6.0';
 async function main() {
     const argv = process.argv.slice(2);
     if (argv.includes('--help') || argv.includes('-h')) {

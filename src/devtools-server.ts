@@ -18,6 +18,7 @@ async function main(): Promise<void> {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('The MCP port is invalid.');
   const adapter: StarlimsMcpAdapter = {
     id: 'starlims-devtools-bridge',
+    confirmsDatabaseChanges: true,
     capabilities,
     invoke: async (tool, arguments_) => {
       const response = await fetch(bridgeUrl, {

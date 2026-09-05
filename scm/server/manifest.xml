@@ -752,6 +752,45 @@
           <IsReferred>false</IsReferred>
         </ServerScript>
         <ServerScript>
+          <ItemID>39FF15FD-CA70-43AD-BA46-7C6C3F70AB78</ItemID>
+          <ItemName>McpDatabaseAccess</ItemName>
+          <LayerId>300</LayerId>
+          <ItemDescription>Dedicated parameterized database access using the existing STARLIMS connection.</ItemDescription>
+          <ItemCategory>SCM_API</ItemCategory>
+          <ItemContent>Server Scripts\SCM_API\McpDatabaseAccess.srvscr</ItemContent>
+          <IsMandatory>false</IsMandatory>
+          <ItemBehaviour>overwrite</ItemBehaviour>
+          <ItemProgrammingLanguage>STARLIMS</ItemProgrammingLanguage>
+          <ItemIsOwned>N</ItemIsOwned>
+          <IsReferred>false</IsReferred>
+        </ServerScript>
+        <ServerScript>
+          <ItemID>81D69BCA-94F6-47A1-B3C3-F36654DBE786</ItemID>
+          <ItemName>McpExecuteDatabaseChange</ItemName>
+          <LayerId>300</LayerId>
+          <ItemDescription>Dedicated parameterized database access using the existing STARLIMS connection.</ItemDescription>
+          <ItemCategory>SCM_API</ItemCategory>
+          <ItemContent>Server Scripts\SCM_API\McpExecuteDatabaseChange.srvscr</ItemContent>
+          <IsMandatory>false</IsMandatory>
+          <ItemBehaviour>overwrite</ItemBehaviour>
+          <ItemProgrammingLanguage>STARLIMS</ItemProgrammingLanguage>
+          <ItemIsOwned>N</ItemIsOwned>
+          <IsReferred>false</IsReferred>
+        </ServerScript>
+        <ServerScript>
+          <ItemID>7AA13A00-4951-426F-9D8B-C6444EF65CFF</ItemID>
+          <ItemName>McpQueryDatabase</ItemName>
+          <LayerId>300</LayerId>
+          <ItemDescription>Dedicated parameterized database access using the existing STARLIMS connection.</ItemDescription>
+          <ItemCategory>SCM_API</ItemCategory>
+          <ItemContent>Server Scripts\SCM_API\McpQueryDatabase.srvscr</ItemContent>
+          <IsMandatory>false</IsMandatory>
+          <ItemBehaviour>overwrite</ItemBehaviour>
+          <ItemProgrammingLanguage>STARLIMS</ItemProgrammingLanguage>
+          <ItemIsOwned>N</ItemIsOwned>
+          <IsReferred>false</IsReferred>
+        </ServerScript>
+        <ServerScript>
           <ItemID>68C09B0B-92DE-4F55-8B4F-7F3218EAA004</ItemID>
           <ItemName>McpGetCheckInHistory</ItemName>
           <LayerId>300</LayerId>

@@ -1,6 +1,6 @@
 {
   "name": "@tenlyc/starlims-mcp",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Standalone and embeddable MCP server for STARLIMS development tools",
   "type": "module",
   "main": "cjs/index.js",
@@ -16,6 +16,11 @@
       "types": "./dist/browser.d.ts",
       "import": "./dist/browser.js",
       "require": "./cjs/browser.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./cjs/client.js"
     }
   },
   "bin": {
@@ -51,6 +56,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@noble/hashes": "2.0.1",
     "@xmldom/xmldom": "^0.9.12",
     "express": "^5.2.1",
     "zod": "^4.5.1"

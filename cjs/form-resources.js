@@ -7,7 +7,9 @@ exports.toProgrammaticFormResources = toProgrammaticFormResources;
 exports.setFormResourceValue = setFormResourceValue;
 exports.contentVersion = contentVersion;
 exports.sameFormResources = sameFormResources;
-const node_crypto_1 = require("node:crypto");
+const sha2_js_1 = require("@noble/hashes/sha2.js");
+const utils_js_1 = require("@noble/hashes/utils.js");
+const randomUUID = () => globalThis.crypto.randomUUID();
 const xmldom_1 = require("@xmldom/xmldom");
 const XML_PREFIX = /^\s*(?:<\?xml[\s\S]*?\?>\s*)?</i;
 function normalizeFormResourcesUri(uri) {
@@ -112,7 +114,7 @@ function serializeProgrammaticResources(resources) {
         throw new Error('Could not create ResourcesDataset.');
     for (const entry of resources) {
         const row = outputDocument.createElementNS(root.namespaceURI, 'ResourcesTable');
-        appendTextElement(outputDocument, row, 'Guid', entry.guid || (0, node_crypto_1.randomUUID)());
+        appendTextElement(outputDocument, row, 'Guid', entry.guid || randomUUID());
         appendTextElement(outputDocument, row, 'ResourceId', entry.resourceId);
         appendTextElement(outputDocument, row, 'ResourceValue', entry.resourceValue);
         root.appendChild(row);
@@ -152,7 +154,7 @@ function setFormResourceValue(payload, resourceId, resourceValue) {
         row = document.documentElement.namespaceURI
             ? document.createElementNS(document.documentElement.namespaceURI, rowName)
             : document.createElement(rowName);
-        appendTextElement(document, row, 'Guid', (0, node_crypto_1.randomUUID)());
+        appendTextElement(document, row, 'Guid', randomUUID());
         appendTextElement(document, row, 'ResourceId', id);
         appendTextElement(document, row, 'ResourceValue', resourceValue);
         document.documentElement.appendChild(row);
@@ -166,7 +168,7 @@ function setFormResourceValue(payload, resourceId, resourceValue) {
     return { xml: new xmldom_1.XMLSerializer().serializeToString(document), created };
 }
 function contentVersion(value) {
-    return (0, node_crypto_1.createHash)('sha256').update(value, 'utf8').digest('hex');
+    return (0, utils_js_1.bytesToHex)((0, sha2_js_1.sha256)(new TextEncoder().encode(value)));
 }
 function sameFormResources(left, right) {
     const canonical = (value) => parseFormResources(value).resources

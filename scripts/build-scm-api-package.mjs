@@ -50,6 +50,7 @@ try {
   const manifestPath = join(root, 'scm', 'distribution', 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   manifest.sha256 = digest;
+  manifest.mcpVersion = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
   manifest.maintainedSource = 'scm/server';
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
   console.log(`Built unified ${target}`);

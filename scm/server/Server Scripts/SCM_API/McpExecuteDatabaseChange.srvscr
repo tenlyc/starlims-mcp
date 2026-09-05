@@ -1,0 +1,10 @@
+/* starlims-mcp owned HTTP entry point, never saves a DataSource. */;
+:DECLARE inputFile, payload;
+:TRY;
+ inputFile := Request:SaveInputStream();
+ payload := FromJSON(ReadText(inputFile));
+ FileSupport(inputFile, "DELETE");
+ :RETURN ExecFunction("SCM_API.McpDatabaseAccess.Run", {payload, "change"});
+:CATCH;
+ :RETURN CreateUDObject({{"success", .F.}, {"message", "Invalid database request or backend unavailable."}});
+:ENDTRY;

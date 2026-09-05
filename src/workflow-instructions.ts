@@ -1,6 +1,8 @@
+import { DATABASE_QUERY_INSTRUCTIONS } from './query-database.js';
 import { MENU_WORKFLOW_INSTRUCTIONS } from './menu-schema.js';
 export const MCP_EFFICIENCY_INSTRUCTIONS = [
   MENU_WORKFLOW_INSTRUCTIONS,
+  DATABASE_QUERY_INSTRUCTIONS,
   'Use the smallest sufficient STARLIMS tool sequence and stop as soon as the request has enough evidence.',
   'Reuse scripts already attached to the prompt and files already present in the Agent workspace; do not rediscover or reread them unless current remote state is required.',
   'When an exact STARLIMS URI is known, call the matching read tool directly. Use search_by_name once for a name, browse_tree only for path navigation, global_code_search only for code-content discovery, and get_table_definition only when table fields are actually needed.',

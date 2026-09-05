@@ -2,3 +2,5 @@
 export { menuSchemas, MENU_WORKFLOW_INSTRUCTIONS } from './menu-schema.js';
 export type { MenuInput } from './menu-schema.js';
 export { MCP_EFFICIENCY_INSTRUCTIONS, mcpReadCacheKey } from './workflow-instructions.js';
+
+export * from './query-database.js';

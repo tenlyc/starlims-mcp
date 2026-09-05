@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStarlimsMcpServer = createStarlimsMcpServer;
+const query_database_js_1 = require("./query-database.js");
 const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
 const z = __importStar(require("zod/v4"));
 const instructions_js_1 = require("./instructions.js");
@@ -72,9 +73,18 @@ function createStarlimsMcpServer(options) {
             description: tool.description,
             inputSchema: tool.inputSchema,
             annotations: annotationsFor(tool.risk)
-        }, async (rawArguments) => {
+        }, async (rawArguments, extra) => {
             const arguments_ = (rawArguments || {});
             try {
+                if (tool.id === 'execute_database_change' && !options.adapter.confirmsDatabaseChanges) {
+                    const change = (0, query_database_js_1.prepareDatabaseChange)(arguments_);
+                    // No boolean supplied by the model can replace a client-originated approval.
+                    const approval = await server.server.elicitInput({ mode: 'form', message: (0, query_database_js_1.databaseChangeConfirmation)(change), requestedSchema: { type: 'object', properties: { approve: { type: 'boolean', title: 'Approve this one database change', default: false } }, required: ['approve'] } });
+                    if (approval.action !== 'accept' || approval.content?.approve !== true)
+                        throw new Error('Database change was not approved. Nothing was executed.');
+                }
+                if (extra.signal.aborted)
+                    throw new Error('Tool request was cancelled before dispatch.');
                 const value = await options.adapter.invoke(tool.adapterTool || tool.id, arguments_);
                 if (tool.id === 'capture_form_screenshot' && value && typeof value === 'object' && 'imageData' in value && typeof value.imageData === 'string') {
                     const { imageData, mimeType, ...metadata } = value;

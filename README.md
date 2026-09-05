@@ -4,7 +4,7 @@
 
 **starlims-mcp 统一管理 MCP 接口，DevTools 集成这些接口，提供可视化开发界面。**
 
-[下载 v0.5.2](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.5.2) · [DevTools 下载](https://github.com/tenlyc/starlims-devtools/releases) · [接口清单](docs/TOOLS.md) · [English](README.en.md)
+[下载 v0.6.0](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.6.0) · [DevTools 下载](https://github.com/tenlyc/starlims-devtools/releases) · [接口清单](docs/TOOLS.md) · [English](README.en.md)
 
 ## 能做什么？
 
@@ -51,15 +51,17 @@ http://127.0.0.1:3102/mcp
 
 ### 两种方式有什么区别？
 
-以下是 v0.5.2 的能力范围，数量包含能力查询接口：
+以下是 v0.6.0 的能力范围，数量包含能力查询接口：
 
 | 使用方式 | 可用工具 | 适合做什么 |
 | --- | ---: | --- |
-| 通过 DevTools | 37 个 | 页面开发、建表、资源、菜单和运行预览 |
-| 独立运行，默认只读 | 8 个 | 浏览、搜索、读取代码、资源和表定义 |
-| 独立运行，开启写入 | 13 个 | 在只读能力上增加签出、保存、资源修改和签入 |
+| 通过 DevTools | 39 个 | 页面开发、建表、资源、菜单和运行预览 |
+| 独立运行，默认只读 | 14 个 | 浏览、搜索、代码、资源、表定义、日志、签出历史、菜单规划和数据库查询 |
+| 独立运行，开启写入 | 29 个 | 增加对象与表维护、签出/保存/签入、脚本和数据源执行、菜单创建及数据库修改 |
 
-独立运行目前尚未接通全部桌面开发能力。可以让 AI 调用 `get_capabilities` 查看当前连接实际提供的接口。
+**v0.6.0 已补齐服务器侧独立适配：默认只读 14 个工具，开启写入后 29 个（含能力查询，默认 `unified` profile）。** 日志、签出列表与历史、对象创建、表维护、脚本/数据源执行和菜单配置均可直接调用 SCM_API，无需启动 DevTools。DevTools 1.7.0 Beta 7 也复用同一服务器执行实现。
+
+预览、截图、DOM 检查、页面错误、SSL 校验、编辑器诊断及 DevTools 输出日志这 10 个工具仍由宿主提供；默认只读不会开放任意脚本/数据源执行。数据库新接口另需配套后台脚本，具体见[独立能力清单](docs/STANDALONE.md#独立能力)。`get_capabilities` 表示当前适配器注册的能力，目标服务器接口版本和权限仍需实际调用确认。
 
 ## SCM_API.sdp 是什么？
 
@@ -69,7 +71,7 @@ http://127.0.0.1:3102/mcp
 AI 应用 → starlims-mcp → SCM_API → STARLIMS
 ```
 
-本仓库统一维护接口源码和 `SCM_API.sdp`，DevTools 分发相同的服务包。在 [Release 下载页](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.5.2) 中：
+本仓库统一维护接口源码和 `SCM_API.sdp`，DevTools 分发相同的服务包。在 [Release 下载页](https://github.com/tenlyc/starlims-mcp/releases/tag/v0.6.0) 中：
 
 | 文件 | 用途 |
 | --- | --- |
@@ -91,3 +93,5 @@ AI 应用 → starlims-mcp → SCM_API → STARLIMS
 本项目为非官方社区项目，与 STARLIMS Corporation 无隶属或支持关系。
 
 部分能力参考 MIT 授权的 [MrDoe/starlimsvscode](https://github.com/MrDoe/starlimsvscode)。本项目采用 [MIT License](LICENSE)，第三方来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+v0.6.0 新增[数据库查询与逐次确认修改](docs/DATABASE_ACCESS.md)，直接复用 STARLIMS Database 连接。

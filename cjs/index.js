@@ -26,4 +26,7 @@ __exportStar(require("./transports.js"), exports);
 __exportStar(require("./menu-schema.js"), exports);
 __exportStar(require("./workflow-instructions.js"), exports);
 __exportStar(require("./instructions.js"), exports);
+__exportStar(require("./query-database.js"), exports);
+__exportStar(require("./menu-service.js"), exports);
+__exportStar(require("./table-definition.js"), exports);
 //# sourceMappingURL=index.js.map

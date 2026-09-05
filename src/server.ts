@@ -1,3 +1,4 @@
+import { prepareDatabaseChange, databaseChangeConfirmation } from './query-database.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import { STARLIMS_MCP_INSTRUCTIONS } from './instructions.js';
@@ -60,9 +61,16 @@ export function createStarlimsMcpServer(options: CreateStarlimsMcpServerOptions)
         inputSchema: tool.inputSchema,
         annotations: annotationsFor(tool.risk)
       },
-      async (rawArguments: unknown) => {
+      async (rawArguments: unknown, extra) => {
         const arguments_ = (rawArguments || {}) as Record<string, unknown>;
         try {
+          if (tool.id === 'execute_database_change' && !options.adapter.confirmsDatabaseChanges) {
+            const change = prepareDatabaseChange(arguments_);
+            // No boolean supplied by the model can replace a client-originated approval.
+            const approval = await server.server.elicitInput({ mode: 'form', message: databaseChangeConfirmation(change), requestedSchema: { type: 'object', properties: { approve: { type: 'boolean', title: 'Approve this one database change', default: false } }, required: ['approve'] } });
+            if (approval.action !== 'accept' || approval.content?.approve !== true) throw new Error('Database change was not approved. Nothing was executed.');
+          }
+          if (extra.signal.aborted) throw new Error('Tool request was cancelled before dispatch.');
           const value = await options.adapter.invoke(tool.adapterTool || tool.id, arguments_);
           if (tool.id === 'capture_form_screenshot' && value && typeof value === 'object' && 'imageData' in value && typeof value.imageData === 'string') {
             const { imageData, mimeType, ...metadata } = value as Record<string, unknown>;
