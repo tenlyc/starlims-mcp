@@ -32,6 +32,10 @@ export declare class StarlimsHttpAdapter implements StarlimsMcpAdapter {
     private checkin;
     private saveFormResources;
     private setFormResource;
+    private formCheckoutLanguage;
+    private inspectHtmlFormResources;
+    private prepareHtmlFormResourceBinding;
+    private saveHtmlFormResourceBinding;
 }
 export {};
 //# sourceMappingURL=starlims-http-adapter.d.ts.map

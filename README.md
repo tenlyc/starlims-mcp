@@ -97,6 +97,18 @@ Call `get_capabilities` after connecting to inspect active tools, provenance, ri
 
 ## MCP 接口目录 / MCP tool reference
 
+### 0.5.2 同步说明 / Integration boundary
+
+本版本同步 Resources 格式转换与标准运行绑定、经过状态核验的表单家族签入，以及重复签出保护。HTML/XFD 的 XML、CodeBehind、Resources、Guide 是一个签出家族，签出一次后直接读取和保存子项；重复签出可能覆盖工作副本，不能逐项再次签出。
+
+This version includes resource format/binding fixes, verified family check-in, and preservation of an existing form checkout. XML, CodeBehind, Resources and Guide share one checkout. Do not re-checkout each child after editing.
+
+DevTools 的宿主扩展目前对外提供 37 个工具，包括菜单、预览、执行和表编辑。这些由 DevTools Adapter 和登录会话实现，独立 HTTP Adapter 不会自动获得全部 37 个。尤其菜单的 get_menu_configuration / plan_menu_item / apply_menu_item 目前是 DevTools 扩展。请用 get_capabilities 和 tools/list 核实当前连接。
+
+DevTools exposes 37 tools through its host extensions. Menu, preview, execution and table-editing capabilities depend on the DevTools adapter and session; they are not all implemented by the standalone HTTP adapter. Use get_capabilities and tools/list for the active connection.
+
+验证：21 项测试和 3 个不可变 vendor 快照校验通过。DevTools 实际材料类型中文页面、CRUD、菜单与系统打印验收属于宿主集成验证，不等于独立 HTTP Adapter 的全功能运行验收。
+
 当前统一目录包含 **27 个业务工具**，Server 另外注册 1 个能力发现工具 `get_capabilities`，因此完整契约最多为 **28 个工具**。实际客户端看到的数量由 `Profile ∩ Adapter capabilities ∩ permission policy` 决定，并不表示缺失的工具发生了故障。
 
 The unified catalog currently contains **27 business tools**. The server registers one additional discovery tool, `get_capabilities`, for a maximum contract of **28 tools**. The actual list visible to a client is the intersection of the selected profile, Adapter capabilities, and permission policy; an omitted tool is not necessarily a server failure.
@@ -155,16 +167,16 @@ Most shared contracts are derived from the pinned `MrDoe/starlimsvscode` source.
 | --- | --- | --- | --- | --- | --- |
 | `checkout_item` | `uri`, `language?` | `write` | `checkout.write` | ✅ 写入模式 / write mode | 编辑前签出项目。Check out an item before editing. |
 | `save_item` | `uri`, `code`, `language?`, `expectedVersion?` | `write` | `code.write` | ✅ 写入模式 / write mode | 保存完整代码，不是局部 Patch；支持版本冲突检查和写后回读。Save complete code, not a partial patch, with conflict detection and read-back verification. |
-| `save_form_resources` | `uri`, `language`, `resourceXml`, `expectedVersion?` | `write` | `forms.resources.write` | ✅ 写入模式 / write mode | 保存指定语言的完整 Resources XML，适合批量修改。Save the complete Resources XML for one language, intended for bulk edits. |
-| `set_form_resource` | `uri`, `language`, `resourceId`, `resourceValue`, `expectedVersion?` | `write` | `forms.resources.write` | ✅ 写入模式 / write mode | 新增或修改单个 ResourceValue，并保留其他资源。Create or update one ResourceValue while preserving all other entries. |
+| `save_form_resources` | `uri`, `language`, `resourceXml`, `expectedVersion?` | `write` | `forms.resources.write` | ✅ 写入模式 / write mode | 批量保存指定语言的 Resources；服务器格式执行完整替换，设计器粘贴格式执行安全合并。保存结果会标明工作副本已更新、Designer 需要重新打开，以及运行时同步需要 Check In。Bulk-save one language; server format performs full replacement, while designer-paste format performs a safe merge. The result distinguishes working-copy update, Designer reload, and Check In required for runtime synchronization. |
+| `set_form_resource` | `uri`, `language`, `resourceId`, `resourceValue`, `expectedVersion?` | `write` | `forms.resources.write` | ✅ 写入模式 / write mode | 按区分大小写的 ResourceId 新增或修改单个 ResourceValue，并保留其他资源；返回相同的 Designer/运行时状态提示。Create or update one ResourceValue by case-sensitive ResourceId while preserving all other entries, with the same Designer/runtime status guidance. |
 | `checkin_item` | `uri`, `reason`, `language?` | `write` | `checkout.checkin` | ✅ 写入模式 / write mode | 用明确原因签入项目。Check in an item with an explicit reason. |
 | `undo_checkout` | `uri` | `destructive` | `checkout.undo` | — | 撤销签出，可能丢失未保存内容，必须明确授权。Undo checkout; may discard work and requires explicit approval. |
 | `execute_server_script` | `uri`, `parameters?`, `outputType?`, `entryPoint?`, `maxCharacters?` | `execute` | `scripts.execute` | — | 执行 Server Script 并返回受限输出。Execute a Server Script and return bounded output. |
 | `execute_data_source` | `uri`, `parameters?`, `outputType?`, `maxRows?`, `maxCharacters?` | `execute` | `datasource.execute` | — | 执行 Data Source 并限制返回行数/字符数。Execute a Data Source with row and character limits. |
 
-`—` 表示当前通用契约存在，但 v0.5.1 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
+`—` 表示当前通用契约存在，但 v0.5.2 的独立 HTTP Adapter 尚未实现该能力；DevTools 或 VS Code Adapter 可以提供它。写入、执行和破坏性工具还必须经过宿主审批、服务器权限和质量门禁，不能只依据 MCP annotations 自动授权。
 
-`—` means the unified contract exists but the v0.5.1 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
+`—` means the unified contract exists but the v0.5.2 standalone HTTP Adapter does not implement that capability; a DevTools or VS Code Adapter may provide it. Write, execute, and destructive tools must also pass host approval, server authorization, and quality gates—MCP annotations alone are not authorization.
 
 推荐远端编辑顺序 / Recommended remote-edit sequence:
 
@@ -230,9 +242,9 @@ The shared contract provides three tools that always carry an explicit `language
 - `set_form_resource`：只新增或修改一个资源值，保留文档中的其他资源。
 
   Creates or updates one resource value while preserving the rest of the document.
-- `save_form_resources`：保存经过调用方编辑的完整 Resources XML，适用于批量修改。
+- `save_form_resources`：批量保存 Resources XML。输入 `ResourcesDataset/ResourcesTable` 时表示明确的完整替换；输入设计器粘贴格式 `<Resources><Resource><Id>…</Id><Value>…</Value></Resource></Resources>` 时，会转换为服务器格式并合并，保留已有 GUID 和 `GUIDE` 等仅存在于服务器的条目。
 
-  Saves a complete caller-edited Resources XML document for bulk changes.
+  Bulk-saves Resources XML. `ResourcesDataset/ResourcesTable` means an explicit full replacement. Designer-paste `<Resources><Resource><Id>…</Id><Value>…</Value></Resource></Resources>` input is converted and merged while preserving existing GUIDs and server-only entries such as `GUIDE`.
 
 这些工具使用企业树或签出列表返回的 `/HTMLForms/Resources/...` URI。写入仍由宿主权限和内容版本门禁控制。
 
@@ -359,7 +371,7 @@ Binding to a non-loopback address requires `STARLIMS_MCP_AUTH_TOKEN` with at lea
 import { createStarlimsMcpServer } from '@tenlyc/starlims-mcp';
 
 const server = createStarlimsMcpServer({
-  version: '0.5.1',
+  version: '0.5.2',
   profile: 'devtools',
   adapter: {
     id: 'my-starlims-host',
@@ -430,3 +442,7 @@ The shared contracts and compatibility mappings reference MIT-licensed behavior 
 本仓库自身代码采用 [MIT License](LICENSE)。
 
 This repository's own code is licensed under the [MIT License](LICENSE).
+
+For HTML Forms, resource writes also verify and repair the standard `Resources` loading binding in Form XML, using the GUID resolved from the exact enterprise URI and the explicit language. Existing layered fallback remains intact; custom data sources require manual review. `formBindingVerified` and `formBindingUpdated` report this separately from runtime synchronization. Resources and Form XML use two version-checked saves, not a transaction; re-read both after any partial failure. No automatic check-in is performed.
+
+Resources tools return `formDiagnostics` (binding status, enterprise/XML GUID mismatch, and column definitions missing `xtype`) and `runtimeVerified: false`. These are read-only structural checks, not runtime acceptance. `get_form_resources` additionally returns the resource data `format`. A Form's `<Resources><Data>...</Data></Resources>` is a loading binding, not designer-paste resource data; supplying it to `save_form_resources` is rejected rather than interpreted as zero rows. Resource rows missing their value element are also rejected; explicit empty values remain supported. Build new Form XML from a Designer-generated template for the same control types, preserving typed column metadata.

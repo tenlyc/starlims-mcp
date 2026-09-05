@@ -1,118 +1,160 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { DOMParser, XMLSerializer, DOMImplementation } from '@xmldom/xmldom';
 const XML_PREFIX = /^\s*(?:<\?xml[\s\S]*?\?>\s*)?</i;
-function decodeXmlEntity(value) {
-    return value.replace(/&#(x?[0-9a-f]+);|&(lt|gt|amp|quot|apos);/gi, (match, numeric, named) => {
-        if (numeric) {
-            const radix = numeric[0].toLowerCase() === 'x' ? 16 : 10;
-            return String.fromCodePoint(Number.parseInt(radix === 16 ? numeric.slice(1) : numeric, radix));
-        }
-        return { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" }[String(named).toLowerCase()] || match;
-    });
-}
-function escapeXml(value) {
-    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-}
-function xmlNodes(xml) {
-    const roots = [];
-    const stack = [];
-    const tags = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>|<\/?([A-Za-z_][\w:.-]*)(?:\s[^<>]*?)?\s*\/?>/g;
-    for (const match of xml.matchAll(tags)) {
-        const token = match[0];
-        const start = match.index;
-        if (token.startsWith('<!--') || token.startsWith('<?') || token.startsWith('<![CDATA['))
-            continue;
-        const name = match[1];
-        if (token.startsWith('</')) {
-            const node = stack.pop();
-            if (!node || node.name.toLowerCase() !== name.toLowerCase())
-                throw new Error(`Invalid Form Resources XML near closing tag ${name}.`);
-            node.closeStart = start;
-            node.end = start + token.length;
-            continue;
-        }
-        const node = { name, start, openEnd: start + token.length, closeStart: start + token.length, end: start + token.length, children: [] };
-        const parent = stack[stack.length - 1];
-        if (parent)
-            parent.children.push(node);
-        else
-            roots.push(node);
-        if (!token.endsWith('/>'))
-            stack.push(node);
-    }
-    if (stack.length)
-        throw new Error(`Invalid Form Resources XML: unclosed tag ${stack[stack.length - 1].name}.`);
-    return roots;
-}
-function nodeText(xml, node) {
-    return node ? decodeXmlEntity(xml.slice(node.openEnd, node.closeStart)) : undefined;
-}
-function resourceRows(xml) {
-    const rows = [];
-    const visit = (node) => {
-        const child = (name) => node.children.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
-        const resourceId = nodeText(xml, child('ResourceId'));
-        if (resourceId !== undefined) {
-            rows.push({
-                full: xml.slice(node.start, node.end),
-                tag: node.name,
-                start: node.start,
-                end: node.end,
-                entry: { resourceId, resourceValue: nodeText(xml, child('ResourceValue')) || '', guid: nodeText(xml, child('Guid')) }
-            });
-            return;
-        }
-        node.children.forEach(visit);
-    };
-    xmlNodes(xml).forEach(visit);
-    return rows;
-}
 export function normalizeFormResourcesUri(uri) {
     const normalized = uri.trim().replace(/\\/g, '/').replace(/\/+$/, '');
     const match = normalized.match(/^(.*\/(?:HTMLForms|XFDForms))\/(?:XML|CodeBehind|Guide|Resources)\/([^/]+)$/i);
-    if (!match)
-        throw new Error('Form Resources URI must identify an HTML/XFD form XML, CodeBehind, Guide, or Resources document.');
+    if (!match) {
+        throw new Error('Form Resources requires a URI ending in /HTMLForms/Resources/<form> (the XML, CodeBehind, or Guide URI for the same form is also accepted).');
+    }
     return `${match[1]}/Resources/${match[2]}`;
 }
 export function decodeFormResourcePayload(payload) {
     const trimmed = payload.trim();
-    if (!trimmed || (XML_PREFIX.test(trimmed) && trimmed.includes('<')))
+    if (!trimmed || XML_PREFIX.test(trimmed))
         return payload;
     try {
-        const decoded = Buffer.from(trimmed.replace(/\s+/g, ''), 'base64').toString('utf8');
-        return XML_PREFIX.test(decoded) && decoded.includes('<') ? decoded : payload;
+        const binary = atob(trimmed.replace(/\s+/g, ''));
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+        const decoded = new TextDecoder().decode(bytes);
+        return XML_PREFIX.test(decoded) ? decoded : payload;
     }
     catch {
         return payload;
     }
 }
+function directChild(element, name) {
+    return Array.from(element.childNodes).find((node) => node.nodeType === 1 && ((node.localName || node.nodeName).toLowerCase() === name.toLowerCase()));
+}
+function resourceFormat(document) {
+    if (!document.documentElement)
+        throw new Error('Missing Form Resources root element.');
+    const root = (document.documentElement.localName || document.documentElement.nodeName).toLowerCase();
+    if (root === 'resources')
+        return 'designer';
+    if (root === 'resourcesdataset' || root === 'newdataset' || root === 'dataset')
+        return 'programmatic';
+    throw new Error(`Unsupported Form Resources root element '${document.documentElement.nodeName}'. Use ResourcesDataset for SCM_API or Resources for designer-paste input.`);
+}
+function resourceRows(document, format) {
+    const rowName = format === 'designer' ? 'Resource' : 'ResourcesTable';
+    return Array.from(document.getElementsByTagName('*')).filter((element) => ((element.localName || element.nodeName).toLowerCase() === rowName.toLowerCase()));
+}
+function parseDocument(xml) {
+    const document = new DOMParser({ onError: (_level, message) => { throw new Error(message); } }).parseFromString(xml, 'application/xml');
+    const parserError = document.getElementsByTagName('parsererror')[0];
+    if (!document.documentElement || parserError) {
+        throw new Error(`Invalid Form Resources XML${parserError?.textContent ? `: ${parserError.textContent.trim()}` : '.'}`);
+    }
+    return document;
+}
 export function parseFormResources(payload) {
     const xml = decodeFormResourcePayload(payload);
-    if (!xml.trim().startsWith('<') || !xml.trim().endsWith('>'))
-        throw new Error('Invalid Form Resources XML.');
-    return { xml, resources: resourceRows(xml).map((row) => row.entry) };
+    const document = parseDocument(xml);
+    const format = resourceFormat(document);
+    // A Form's <Resources><Data>...</Data></Resources> is a loading binding,
+    // never a resource list. Do not silently interpret it as an empty dataset.
+    const expectedRow = format === 'designer' ? 'resource' : 'resourcestable';
+    for (const node of Array.from(document.documentElement.childNodes)) {
+        if (node.nodeType !== 1)
+            continue;
+        const element = node;
+        if (element.namespaceURI === 'http://www.w3.org/2001/XMLSchema')
+            continue;
+        if ((element.localName || element.nodeName).toLowerCase() !== expectedRow) {
+            throw new Error('Expected resource data rows, not Form XML or a Resources loading binding. Use ResourcesDataset/ResourcesTable or designer Resources/Resource.');
+        }
+    }
+    const idName = format === 'designer' ? 'Id' : 'ResourceId';
+    const valueName = format === 'designer' ? 'Value' : 'ResourceValue';
+    const rows = resourceRows(document, format);
+    for (const row of rows) {
+        if (row.parentNode !== document.documentElement || !directChild(row, valueName)) {
+            throw new Error('Resource rows must be direct children and include a value element (an empty element is allowed).');
+        }
+    }
+    const resources = rows.map((row) => ({
+        resourceId: directChild(row, idName)?.textContent || '',
+        resourceValue: directChild(row, valueName)?.textContent || '',
+        guid: directChild(row, 'Guid')?.textContent || undefined
+    }));
+    const ids = new Set();
+    for (const entry of resources) {
+        if (ids.has(entry.resourceId))
+            throw new Error(`Form Resources contains duplicate ResourceId '${entry.resourceId}'.`);
+        ids.add(entry.resourceId);
+    }
+    const rowName = format === 'designer' ? 'Resource' : 'ResourcesTable';
+    if (resources.some((entry) => !entry.resourceId.trim())) {
+        throw new Error(`Form Resources contains a ${rowName} row without a valid ID.`);
+    }
+    return { xml, resources, format };
+}
+function appendTextElement(document, parent, name, value) {
+    const element = parent.namespaceURI ? document.createElementNS(parent.namespaceURI, name) : document.createElement(name);
+    element.appendChild(document.createTextNode(value));
+    parent.appendChild(element);
+    return element;
+}
+function serializeProgrammaticResources(resources) {
+    const outputDocument = new DOMImplementation().createDocument('http://tempuri.org/ResourcesDataset.xsd', 'ResourcesDataset', null);
+    const root = outputDocument.documentElement;
+    if (!root)
+        throw new Error('Could not create ResourcesDataset.');
+    for (const entry of resources) {
+        const row = outputDocument.createElementNS(root.namespaceURI, 'ResourcesTable');
+        appendTextElement(outputDocument, row, 'Guid', entry.guid || randomUUID());
+        appendTextElement(outputDocument, row, 'ResourceId', entry.resourceId);
+        appendTextElement(outputDocument, row, 'ResourceValue', entry.resourceValue);
+        root.appendChild(row);
+    }
+    return new XMLSerializer().serializeToString(outputDocument);
+}
+export function toProgrammaticFormResources(payload, currentPayload) {
+    const parsed = parseFormResources(payload);
+    if (parsed.format === 'programmatic')
+        return parsed.xml;
+    if (!currentPayload)
+        return serializeProgrammaticResources(parsed.resources);
+    const current = parseFormResources(currentPayload);
+    const desired = new Map(parsed.resources.map((entry) => [entry.resourceId, entry]));
+    const merged = current.resources.map((entry) => {
+        const replacement = desired.get(entry.resourceId);
+        if (!replacement)
+            return entry;
+        desired.delete(entry.resourceId);
+        return { ...entry, resourceValue: replacement.resourceValue };
+    });
+    for (const entry of desired.values()) {
+        merged.push(entry);
+    }
+    return serializeProgrammaticResources(merged);
 }
 export function setFormResourceValue(payload, resourceId, resourceValue) {
     const id = resourceId.trim();
     if (!id)
         throw new Error('ResourceId is required.');
-    const parsed = parseFormResources(payload);
-    const rows = resourceRows(parsed.xml);
-    const row = rows.find((candidate) => candidate.entry.resourceId === id);
-    if (row) {
-        const valuePattern = /<ResourceValue(?:\s[^>]*)?>[\s\S]*?<\/ResourceValue>/i;
-        const replacement = `<ResourceValue>${escapeXml(resourceValue)}</ResourceValue>`;
-        const updatedRow = valuePattern.test(row.full)
-            ? row.full.replace(valuePattern, replacement)
-            : row.full.replace(new RegExp(`</${row.tag}>$`, 'i'), `${replacement}</${row.tag}>`);
-        return { xml: `${parsed.xml.slice(0, row.start)}${updatedRow}${parsed.xml.slice(row.end)}`, created: false };
+    const document = parseDocument(toProgrammaticFormResources(payload));
+    const rows = resourceRows(document, 'programmatic');
+    let row = rows.find((candidate) => directChild(candidate, 'ResourceId')?.textContent === id);
+    const created = !row;
+    if (!row) {
+        const rowName = rows[0]?.localName || 'ResourcesTable';
+        row = document.documentElement.namespaceURI
+            ? document.createElementNS(document.documentElement.namespaceURI, rowName)
+            : document.createElement(rowName);
+        appendTextElement(document, row, 'Guid', randomUUID());
+        appendTextElement(document, row, 'ResourceId', id);
+        appendTextElement(document, row, 'ResourceValue', resourceValue);
+        document.documentElement.appendChild(row);
     }
-    const rowTag = rows[0]?.tag || 'ResourcesTable';
-    const newRow = `<${rowTag}><Guid>${randomUUID()}</Guid><ResourceId>${escapeXml(id)}</ResourceId><ResourceValue>${escapeXml(resourceValue)}</ResourceValue></${rowTag}>`;
-    const rootClose = parsed.xml.match(/<\/([A-Za-z_][\w:.-]*)>\s*$/);
-    if (!rootClose)
-        throw new Error('Unable to locate the Form Resources root element.');
-    const index = rootClose.index;
-    return { xml: `${parsed.xml.slice(0, index)}${newRow}${parsed.xml.slice(index)}`, created: true };
+    else {
+        const valueElement = directChild(row, 'ResourceValue') || appendTextElement(document, row, 'ResourceValue', '');
+        while (valueElement.firstChild)
+            valueElement.removeChild(valueElement.firstChild);
+        valueElement.appendChild(document.createTextNode(resourceValue));
+    }
+    return { xml: new XMLSerializer().serializeToString(document), created };
 }
 export function contentVersion(value) {
     return createHash('sha256').update(value, 'utf8').digest('hex');

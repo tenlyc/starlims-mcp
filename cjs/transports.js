@@ -1,17 +1,30 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DEFAULT_MCP_JSON_BODY_LIMIT = void 0;
 exports.connectStdio = connectStdio;
 exports.startHttpTransport = startHttpTransport;
 const node_crypto_1 = require("node:crypto");
-const express_js_1 = require("@modelcontextprotocol/sdk/server/express.js");
+const express_1 = __importDefault(require("express"));
+const hostHeaderValidation_js_1 = require("@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 async function connectStdio(server) {
     await server.connect(new stdio_js_1.StdioServerTransport());
 }
+exports.DEFAULT_MCP_JSON_BODY_LIMIT = '8mb';
 async function startHttpTransport(options) {
-    const app = (0, express_js_1.createMcpExpressApp)({ host: options.host });
+    // The MCP SDK helper uses Express' default 100 KB JSON parser. STARLIMS
+    // forms and scripts commonly exceed that size, so configure an explicit,
+    // bounded limit before any MCP route is registered.
+    const app = (0, express_1.default)();
+    app.use(express_1.default.json({ limit: options.jsonBodyLimit ?? exports.DEFAULT_MCP_JSON_BODY_LIMIT }));
+    if (['127.0.0.1', 'localhost', '::1'].includes(options.host)) {
+        app.use((0, hostHeaderValidation_js_1.localhostHostValidation)());
+    }
     const sessions = new Map();
     app.get('/health', (_request, response) => response.json({ ok: true, service: 'starlims-mcp' }));
     app.all('/mcp', async (request, response) => {

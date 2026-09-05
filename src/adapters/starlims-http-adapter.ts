@@ -1,4 +1,7 @@
-import { contentVersion, decodeFormResourcePayload, normalizeFormResourcesUri, parseFormResources, sameFormResources, setFormResourceValue } from '../form-resources.js';
+import { checkinTargetUri, pendingCheckoutIds, assertCheckinAccepted } from '../checkin-verification.js';
+import { DOMParser } from '@xmldom/xmldom';
+import { contentVersion, decodeFormResourcePayload, normalizeFormResourcesUri, parseFormResources, sameFormResources, setFormResourceValue, toProgrammaticFormResources } from '../form-resources.js';
+import { ensureFormResourceBinding, inspectFormResourceBinding } from '../form-resource-binding.js';
 import type { StarlimsMcpConfig } from '../config.js';
 import type { StarlimsLogger } from '../logger.js';
 import type { BackendComponentVersion, StarlimsMcpAdapter } from '../types.js';
@@ -178,13 +181,27 @@ export class StarlimsHttpAdapter implements StarlimsMcpAdapter {
     const language = this.language(args.language);
     const parsed = parseFormResources((await this.readCode(uri, language)).code);
     const bounded = truncate(parsed.xml, args.maxCharacters);
-    return { uri, language, version: contentVersion(parsed.xml), resources: parsed.resources, totalItems: parsed.resources.length, ...(args.includeXml === true ? { resourceXml: bounded.value, totalCharacters: bounded.totalCharacters, truncated: bounded.truncated } : {}) };
+    return { uri, language, format: parsed.format, formDiagnostics: await this.inspectHtmlFormResources(uri, language), runtimeVerified: false, version: contentVersion(parsed.xml), resources: parsed.resources, totalItems: parsed.resources.length, ...(args.includeXml === true ? { resourceXml: bounded.value, totalCharacters: bounded.totalCharacters, truncated: bounded.truncated } : {}) };
   }
 
   private async checkout(args: Record<string, unknown>): Promise<unknown> {
     this.assertWriteAllowed('checkout_item');
     const uri = String(args.uri || '');
     const language = this.language(args.language);
+    if (/\/(HTMLForms|XFDForms)\//i.test(uri)) {
+      const targetUri = checkinTargetUri(uri);
+      const items = this.normalizeItems(await this.request('Search', { query: { itemName: targetUri.slice(targetUri.lastIndexOf('/') + 1), exactMatch: 'true' } })).map(objectValue);
+      const guid = items.find(item => checkinTargetUri(String(item.uri || item.id)).toLowerCase() === targetUri.toLowerCase())?.guid;
+      if (typeof guid !== 'string') throw new Error('Cannot resolve form family GUID; no checkout was performed.');
+      const status = await this.request('GetCheckedOutItems');
+      if (status.success !== true) throw new Error('Checkout status unavailable; no checkout was performed.');
+      const pending = pendingCheckoutIds(status.data);
+      if (pending.includes(guid.toLowerCase()) || pending.includes(targetUri.toLowerCase())) {
+        const checkoutLanguage = await this.formCheckoutLanguage(guid, targetUri);
+        if (args.language && checkoutLanguage !== language) throw new Error(`Form family is already checked out in ${checkoutLanguage || 'an unverified language'}; no checkout was performed. Preserve the existing working copy before changing language.`);
+        return { uri, checkedOut: true, alreadyCheckedOut: true, checkoutLanguage };
+      }
+    }
     const response = await this.request('CheckOut', { query: { URI: uri, UserLang: language } });
     return { uri, language, checkedOut: response.success !== false, localPath: response.localPath };
   }
@@ -215,16 +232,45 @@ export class StarlimsHttpAdapter implements StarlimsMcpAdapter {
   private async checkin(args: Record<string, unknown>): Promise<unknown> {
     this.assertWriteAllowed('checkin_item');
     const uri = String(args.uri || '');
+    const targetUri = checkinTargetUri(uri);
     const language = this.language(args.language);
-    await this.request('CheckIn', { query: { URI: uri, UserLang: language, Reason: String(args.reason || '') } });
-    return { uri, language, checkedIn: true };
+    const items = this.normalizeItems(await this.request('Search', { query: { itemName: targetUri.slice(targetUri.lastIndexOf('/') + 1), exactMatch: 'true' } })).map(objectValue);
+    const guid = items.find((item) => checkinTargetUri(String(item.uri || item.id)).toLowerCase() === targetUri.toLowerCase())?.guid
+      || (/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(targetUri) ? targetUri : undefined);
+    if (typeof guid !== 'string') throw new Error('Cannot resolve the exact check-in target GUID. No check-in was submitted.');
+    const status = async () => {
+      const response = await this.request('GetCheckedOutItems');
+      if (response.success !== true) throw new Error('Checkout status request failed.');
+      return pendingCheckoutIds(response.data);
+    };
+    const hasTarget = (ids: string[]) => ids.includes(guid.toLowerCase()) || ids.includes(targetUri.toLowerCase());
+    if (!hasTarget(await status())) throw new Error('The target is not checked out by the current user. No check-in was submitted.');
+    const response = await this.request('CheckIn', { query: { URI: targetUri, UserLang: language, Reason: String(args.reason || '') } });
+    assertCheckinAccepted(response);
+    if (hasTarget(await status())) throw new Error('CheckIn returned success but the target is still checked out. Check-in was not verified; inspect the backend result before retrying.');
+    return { uri, targetUri, language, guid, checkedIn: true, verified: true, verification: 'checkout_released' };
   }
 
   private async saveFormResources(args: Record<string, unknown>): Promise<unknown> {
     const uri = normalizeFormResourcesUri(String(args.uri || ''));
     const language = this.language(args.language);
-    const xml = parseFormResources(String(args.resourceXml || '')).xml;
-    return this.saveVerified(uri, language, xml, args.expectedVersion ? String(args.expectedVersion) : undefined, true);
+    const current = parseFormResources((await this.readCode(uri, language)).code);
+    const currentVersion = contentVersion(current.xml);
+    if (args.expectedVersion && String(args.expectedVersion) !== currentVersion) throw new Error('Remote Form Resources changed after they were read; update was blocked.');
+    const xml = toProgrammaticFormResources(String(args.resourceXml || ''), current.xml);
+    const binding = await this.prepareHtmlFormResourceBinding(uri, language);
+    const result = objectValue(await this.saveVerified(uri, language, xml, currentVersion, true));
+    const bindingResult = await this.saveHtmlFormResourceBinding(binding);
+    return {
+      ...result,
+      ...bindingResult,
+      formDiagnostics: await this.inspectHtmlFormResources(uri, language),
+      runtimeVerified: false,
+      workingCopyUpdated: true,
+      designerReloadRequired: true,
+      runtimeSyncRequiresCheckIn: true,
+      nextStep: 'Close and reopen the already-open HTML Form Designer tab to reload its cached Resources grid. Check In only after validation to synchronize runtime resources.'
+    };
   }
 
   private async setFormResource(args: Record<string, unknown>): Promise<unknown> {
@@ -234,7 +280,72 @@ export class StarlimsHttpAdapter implements StarlimsMcpAdapter {
     const currentVersion = contentVersion(current.xml);
     if (args.expectedVersion && String(args.expectedVersion) !== currentVersion) throw new Error('Remote Form Resources changed after they were read; update was blocked.');
     const updated = setFormResourceValue(current.xml, String(args.resourceId || ''), String(args.resourceValue ?? ''));
+    const binding = await this.prepareHtmlFormResourceBinding(uri, language);
     const result = objectValue(await this.saveVerified(uri, language, updated.xml, currentVersion, true));
-    return { ...result, resourceId: String(args.resourceId || ''), created: updated.created };
+    const bindingResult = await this.saveHtmlFormResourceBinding(binding);
+    return {
+      ...result,
+      ...bindingResult,
+      formDiagnostics: await this.inspectHtmlFormResources(uri, language),
+      runtimeVerified: false,
+      resourceId: String(args.resourceId || ''),
+      created: updated.created,
+      workingCopyUpdated: true,
+      designerReloadRequired: true,
+      runtimeSyncRequiresCheckIn: true,
+      nextStep: 'Close and reopen the already-open HTML Form Designer tab to reload its cached Resources grid. Check In only after validation to synchronize runtime resources.'
+    };
+  }
+
+  private async formCheckoutLanguage(formId: string, uri: string): Promise<string | null> {
+    const response = await this.request('GetCheckedOutItems');
+    if (typeof response.data === 'string') {
+      const doc = new DOMParser({ onError: (_level, message) => { throw new Error(message); } }).parseFromString(response.data, 'application/xml');
+      for (const row of Array.from(doc.getElementsByTagName('PendingCheckins'))) {
+        const id = row.getElementsByTagName('CHILDID')[0]?.textContent;
+        if (id?.toLowerCase() === formId.toLowerCase()) return row.getElementsByTagName('LANGID')[0]?.textContent || null;
+      }
+      return null;
+    }
+    const item = this.normalizeItems(response).map(objectValue).find((item) => String(item.guid || item.id).toLowerCase() === formId.toLowerCase() || item.uri === uri);
+    return typeof item?.language === 'string' ? item.language : null;
+  }
+
+  private async inspectHtmlFormResources(resourceUri: string, language: string) {
+    if (!resourceUri.includes('/HTMLForms/Resources/')) return { status: 'not_applicable', runtimeVerified: false };
+    try {
+      const uri = resourceUri.replace('/Resources/', '/XML/');
+      const name = uri.slice(uri.lastIndexOf('/') + 1);
+      const items = this.normalizeItems(await this.request('Search', { query: { itemName: name, exactMatch: 'true' } })).map(objectValue);
+      const formId = items.find((item) => String(item.uri || item.id) === uri)?.guid;
+      if (typeof formId !== 'string') throw new Error('Enterprise GUID could not be resolved.');
+      const checkoutLanguage = await this.formCheckoutLanguage(formId, uri);
+      return { uri, checkoutLanguage, writableInRequestedLanguage: checkoutLanguage ? checkoutLanguage === language : null, ...inspectFormResourceBinding((await this.readCode(uri, language)).code, formId, language) };
+    } catch (error) {
+      return { status: 'unavailable', warnings: [error instanceof Error ? error.message : String(error)], runtimeVerified: false };
+    }
+  }
+
+  private async prepareHtmlFormResourceBinding(resourceUri: string, language: string) {
+    if (!resourceUri.includes('/HTMLForms/Resources/')) return undefined;
+    const uri = resourceUri.replace('/Resources/', '/XML/');
+    const name = uri.slice(uri.lastIndexOf('/') + 1);
+    const items = this.normalizeItems(await this.request('Search', { query: { itemName: name, exactMatch: 'true' } })).map(objectValue);
+    const formId = items.find((item) => String(item.uri || item.id) === uri)?.guid;
+    if (typeof formId !== 'string') throw new Error('Cannot verify the HTML form GUID from the enterprise tree. Resources save was blocked.');
+    const checkoutLanguage = await this.formCheckoutLanguage(formId, uri);
+    if (checkoutLanguage && checkoutLanguage !== language) throw new Error(`Form Resources language ${language} does not match the verified checkout language ${checkoutLanguage || '(not checked out)'}. Resolve the checkout language before saving; no resource data was written.`);
+    const before = (await this.readCode(uri, language)).code;
+    return { uri, formId, language, before, ...ensureFormResourceBinding(before, formId, language) };
+  }
+
+  private async saveHtmlFormResourceBinding(binding: Awaited<ReturnType<StarlimsHttpAdapter['prepareHtmlFormResourceBinding']>>) {
+    if (!binding) return { formBindingVerified: false, formBindingUpdated: false };
+    if (binding.changed) await this.saveVerified(binding.uri, binding.language, binding.xml, contentVersion(binding.before));
+    const actual = (await this.readCode(binding.uri, binding.language)).code;
+    if (ensureFormResourceBinding(actual, binding.formId, binding.language).changed) {
+      throw new Error('Resources were saved, but the HTML Form loading binding could not be verified. Read both documents before retrying.');
+    }
+    return { formBindingVerified: true, formBindingUpdated: binding.changed };
   }
 }

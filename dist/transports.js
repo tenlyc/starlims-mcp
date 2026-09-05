@@ -1,13 +1,22 @@
 import { randomUUID } from 'node:crypto';
-import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
+import express from 'express';
+import { localhostHostValidation } from '@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 export async function connectStdio(server) {
     await server.connect(new StdioServerTransport());
 }
+export const DEFAULT_MCP_JSON_BODY_LIMIT = '8mb';
 export async function startHttpTransport(options) {
-    const app = createMcpExpressApp({ host: options.host });
+    // The MCP SDK helper uses Express' default 100 KB JSON parser. STARLIMS
+    // forms and scripts commonly exceed that size, so configure an explicit,
+    // bounded limit before any MCP route is registered.
+    const app = express();
+    app.use(express.json({ limit: options.jsonBodyLimit ?? DEFAULT_MCP_JSON_BODY_LIMIT }));
+    if (['127.0.0.1', 'localhost', '::1'].includes(options.host)) {
+        app.use(localhostHostValidation());
+    }
     const sessions = new Map();
     app.get('/health', (_request, response) => response.json({ ok: true, service: 'starlims-mcp' }));
     app.all('/mcp', async (request, response) => {
